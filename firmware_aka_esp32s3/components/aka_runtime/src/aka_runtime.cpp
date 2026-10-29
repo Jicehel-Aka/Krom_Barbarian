@@ -146,7 +146,7 @@ static bool sd_mkdir(const char* path) {
 }
 
 void AkaRuntime::begin(const char* gameId) {
-    strncpy(m_gameId, gameId, sizeof(m_gameId) - 1);
+    snprintf(m_gameId, sizeof(m_gameId), "%s", gameId);
     snprintf(m_gamePath, sizeof(m_gamePath), "/sdcard/%s", gameId);
 
     struct stat st;
@@ -299,7 +299,7 @@ static char s_truncBuf[3][40];
 static const char* truncate_to_fit(const char* s, int maxChars, int bufIdx) {
     char* buf = s_truncBuf[bufIdx];
     size_t len = strlen(s);
-    if ((int)len <= maxChars) { strncpy(buf, s, 39); buf[39] = '\0'; return buf; }
+    if ((int)len <= maxChars) { snprintf(buf, 40, "%s", s); return buf; }
     int keep = maxChars - 3; if (keep < 0) keep = 0;
     memcpy(buf, s, keep);
     buf[keep] = buf[keep+1] = buf[keep+2] = '.';
@@ -320,7 +320,7 @@ void AkaRuntime::menuDrawCredits() {
     // lignes plutot que tronquee brutalement, plus lisible.
     size_t srcLen = strlen(m_sourceUrl);
     if (srcLen > 26) {
-        char line1[27]; strncpy(line1, m_sourceUrl, 26); line1[26] = '\0';
+        char line1[27]; memcpy(line1, m_sourceUrl, 26); line1[26] = '\0';
         gfx.move_cursor(60, y); gfx.print_str(line1); y += 12;
         gfx.move_cursor(60, y); gfx.print_str(truncate_to_fit(m_sourceUrl + 26, 26, 1));
     } else {
@@ -500,7 +500,7 @@ bool AkaRuntime::takeScreenshot() {
     bool mkOk = sd_mkdir(kDir);
     ESP_LOGI(TAG, "takeScreenshot: mkdir(%s) -> %s", kDir, mkOk ? "ok" : "ECHEC");
 
-    char path[96];
+    char path[112];
     int shot_num = -1;
     for (int i = 0; i < 10000; ++i) {
         snprintf(path, sizeof(path), "%s/%04d.BMP", kDir, i);
@@ -578,7 +578,7 @@ void    AkaRuntime::setVolumeChangedCallback(void (*callback)(uint8_t, uint8_t))
 const char* AkaRuntime::getLanguage() const { return m_language; }
 
 void AkaRuntime::setLanguage(const char* code) {
-    strncpy(m_language, code, sizeof(m_language) - 1);
+    snprintf(m_language, sizeof(m_language), "%s", code);
     load_language(m_gameId, m_language);
     save_settings(m_language);
 }

@@ -36,7 +36,7 @@
 // evite un futur "multiple definition" au lien si un jour un 2e
 // fichier l'inclut dans le meme binaire) : "inline" (C++17) plutot
 // qu'une simple definition globale.
-inline unsigned char font8x8_basic[128][8] = {
+static const unsigned char font8x8_basic[128][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0000 (nul)
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0001
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0002

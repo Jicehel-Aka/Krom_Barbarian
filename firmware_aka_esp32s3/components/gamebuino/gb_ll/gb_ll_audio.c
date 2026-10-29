@@ -27,6 +27,7 @@ Authors:
 #include "freertos/task.h"
 #include "soc/soc_caps.h"
 #include "esp_log.h"
+#include "esp_idf_version.h"
 #include "driver/i2s_std.h"
 #include <string.h>  // <cstring> en C++
 #include "gb_ll_lcd.h"
@@ -139,7 +140,9 @@ int gb_ll_init_i2S()
         .dma_frame_num = GB_AUDIO_BUFFER_SAMPLE_COUNT, // 256 x 16b samples
         .auto_clear_after_cb = false,
         .auto_clear_before_cb = false,
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
         .allow_pd = false,
+#endif
         .intr_priority = 3,
     };
 

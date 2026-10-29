@@ -108,7 +108,7 @@ int gb_audio_track_wav::play_wav( const char* pc_file_name )
         f_wav = 0;
         return ESP_FAIL;
     }
-    printf("WAV File %s : %ld bytes to read\n", pc_file_name, WAVE_info.SubChunk2DataSize );
+    printf("WAV File %s : %lu bytes to read\n", pc_file_name, (unsigned long)WAVE_info.SubChunk2DataSize );
 
     u32_sample_count = WAVE_info.SubChunk2DataSize/2; // convert data length to count of 16b samples
     u32_sample_index = 0;
@@ -129,7 +129,7 @@ int gb_audio_track_wav::play_wav( const uint8_t * pi8_wav_file )
         f_wav = 0;
         return ESP_FAIL;
     }
-    printf("WAV memory File %p : %ld bytes to read\n", pi8_wav_file, WAVE_info.SubChunk2DataSize );
+    printf("WAV memory File %p : %lu bytes to read\n", pi8_wav_file, (unsigned long)WAVE_info.SubChunk2DataSize );
 
     p_sample = (const int16_t*)&pi8_wav_file[sizeof(WAVE_info)]; // ptr just after WAV header
     u32_sample_count = WAVE_info.SubChunk2DataSize/2; // convert data length to count of 16b samples

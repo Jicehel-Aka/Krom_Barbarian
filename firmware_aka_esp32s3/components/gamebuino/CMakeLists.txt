@@ -43,5 +43,13 @@ idf_component_register(
     INCLUDE_DIRS "include_lib" "include_ll"
 )
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-deprecated-declarations -Wno-unused-variable)
+target_compile_options(${COMPONENT_LIB} PRIVATE
+    -Wno-deprecated-declarations
+    -Wno-unused-variable
+    -Wno-error=format
+    -Wno-error=format-truncation
+    -Wno-error=stringop-truncation
+    -Wno-error=maybe-uninitialized
+    -Wno-error=missing-field-initializers
+)
 

@@ -159,6 +159,7 @@ void ILI9342C_hard_reset()
 }
 
 
+#include "esp_idf_version.h"
 #include "esp_lcd_panel_ops.h"
 #include "hal/gpio_hal.h"
 #include "driver/gpio.h"
@@ -167,9 +168,12 @@ void ILI9342C_hard_reset()
 #define INPUT 1
 #define OUTPUT 0
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 esp_err_t gpio_func_sel(gpio_num_t gpio_num, uint32_t func);
+#endif
 void pinMode( gpio_num_t pin, uint8_t u8_level )
 {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
     gpio_func_sel( pin , PIN_FUNC_GPIO);
     if ( u8_level == OUTPUT )
     {
@@ -180,6 +184,17 @@ void pinMode( gpio_num_t pin, uint8_t u8_level )
     {
         gpio_set_direction(pin, GPIO_MODE_INPUT );
     }
+#else
+    gpio_reset_pin(pin);
+    if ( u8_level == OUTPUT )
+    {
+        gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT );
+    }
+    else
+    {
+        gpio_set_direction(pin, GPIO_MODE_INPUT );
+    }
+#endif
 }
 
 void digitalWrite( gpio_num_t pin, uint8_t u8_level )

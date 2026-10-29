@@ -909,14 +909,14 @@ void pmf_player::process_pattern_row()
   {
     // get note, instrument, volume and effect for the channel
     audio_channel &chl=m_channels[ci];
-    uint8_t note_idx=0xff, inst_idx=0xff, volume=0xff, effect=0xff, effect_data, sample_start_pos=0;
+    uint8_t note_idx=0xff, inst_idx=0xff, volume=0xff, effect=0xff, effect_data=0, sample_start_pos=0;
     bool reset_sample_pos=true;
     if(ci<m_num_processed_pattern_channels)
       process_track_row(chl, note_idx, inst_idx, volume, effect, effect_data);
     if(m_row_callback)
     {
       // apply custom track data
-      uint8_t custom_note_idx=0xff, custom_inst_idx=0xff, custom_volume=0xff, custom_effect=0xff, custom_effect_data;
+      uint8_t custom_note_idx=0xff, custom_inst_idx=0xff, custom_volume=0xff, custom_effect=0xff, custom_effect_data=0;
       (*m_row_callback)(m_row_callback_custom_data, ci, custom_note_idx, custom_inst_idx, custom_volume, custom_effect, custom_effect_data);
       if(custom_note_idx<12*10 || custom_note_idx==pmfcfg_note_cut || custom_note_idx==pmfcfg_note_off)
         note_idx=custom_note_idx;
@@ -1416,7 +1416,7 @@ void pmf_player::init_pattern(uint8_t playlist_pos_, uint8_t row_)
       chl.decomp_type=read_bits(chl.track_pos, chl.track_bit_pos, 4)&15;
 
     // skip to given row
-    uint8_t note_idx, inst_idx, volume, effect, effect_data;
+    uint8_t note_idx=0xff, inst_idx=0xff, volume=0xff, effect=0xff, effect_data=0;
     for(unsigned ri=0; ri<row_; ++ri)
       process_track_row(chl, note_idx, inst_idx, volume, effect, effect_data);
   }
