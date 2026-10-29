@@ -1,0 +1,23 @@
+{
+  "MENU_TITLE": "MENU DI SISTEMA AKA",
+  "MENU_RESUME": "Torna al gioco",
+  "MENU_GAME_SELECT": "Schermata Titolo",
+  "MENU_CONTROLS": "Comandi",
+  "MENU_LANGUAGE": "Lingua",
+  "MENU_VOLUME": "Volume audio",
+  "MENU_VOL_MUSIC": "Musica",
+  "MENU_VOL_SFX": "Effetti sonori",
+  "MENU_CREDITS": "Crediti",
+  "MENU_RETURN_LOADER": "Torna al Loader",
+  "MENU_LEGEND": "A:Conferma  C/MENU:Indietro",
+  "CREDITS_AUTHOR": "Autore:",
+  "CREDITS_LICENSE": "Licenza:",
+  "CREDITS_SOURCE": "Codice e Release:",
+  "CTRL_1": "Stick/DPad: Muovi / Salta / Abbassa",
+  "CTRL_2": "A: Fendente / Affondo",
+  "CTRL_3": "B: Spazzata Bassa",
+  "CTRL_4": "C: Rotazione Decapitante 360",
+  "CTRL_5": "D:Capriola",
+  "CTRL_6": "L1: Parata  |  R1: Colpo Pesante",
+  "CTRL_7": "MENU: Sistema | RUN+MENU: Loader"
+}

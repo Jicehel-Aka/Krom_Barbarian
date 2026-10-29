@@ -1,0 +1,23 @@
+{
+  "MENU_TITLE": "MENU SYSTEME AKA",
+  "MENU_RESUME": "Reprendre la partie",
+  "MENU_GAME_SELECT": "Ecran Titre",
+  "MENU_CONTROLS": "Commandes",
+  "MENU_LANGUAGE": "Langue",
+  "MENU_VOLUME": "Volume audio",
+  "MENU_VOL_MUSIC": "Musique",
+  "MENU_VOL_SFX": "Effets sonores",
+  "MENU_CREDITS": "Credits",
+  "MENU_RETURN_LOADER": "Retourner au Loader",
+  "MENU_LEGEND": "A:Valider  C/MENU:Retour",
+  "CREDITS_AUTHOR": "Auteur :",
+  "CREDITS_LICENSE": "Licence :",
+  "CREDITS_SOURCE": "Code & Release :",
+  "CTRL_1": "Stick/DPad : Marche / Saut / Bas",
+  "CTRL_2": "A : Taille Vive / Estoc",
+  "CTRL_3": "B : Balayage Bas",
+  "CTRL_4": "C : Moulinet Decapitant 360",
+  "CTRL_5": "D : Roulade d'Esquive",
+  "CTRL_6": "L1 : Parade  |  R1 : Fendoir",
+  "CTRL_7": "MENU : Systeme | RUN+MENU : Loader"
+}

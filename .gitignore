@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+coverage/
+.aistudio/
+release_out/
+firmware_aka_esp32s3/build/
+firmware_aka_esp32s3/managed_components/
+.DS_Store
+*.log
+.env*
+!.env.example

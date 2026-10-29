@@ -1,0 +1,23 @@
+{
+  "MENU_TITLE": "MENU DEL SISTEMA AKA",
+  "MENU_RESUME": "Volver al juego",
+  "MENU_GAME_SELECT": "Pantalla Titulo",
+  "MENU_CONTROLS": "Controles",
+  "MENU_LANGUAGE": "Idioma",
+  "MENU_VOLUME": "Volumen de audio",
+  "MENU_VOL_MUSIC": "Musica",
+  "MENU_VOL_SFX": "Efectos de sonido",
+  "MENU_CREDITS": "Creditos",
+  "MENU_RETURN_LOADER": "Volver al Loader",
+  "MENU_LEGEND": "A:Aceptar  C/MENU:Volver",
+  "CREDITS_AUTHOR": "Autor:",
+  "CREDITS_LICENSE": "Licencia:",
+  "CREDITS_SOURCE": "Codigo y Release:",
+  "CTRL_1": "Stick/DPad: Mover / Saltar / Agachar",
+  "CTRL_2": "A: Tajo Veloz / Estocada",
+  "CTRL_3": "B: Barrido Bajo",
+  "CTRL_4": "C: Giro Decapitador 360",
+  "CTRL_5": "D: Rodar",
+  "CTRL_6": "L1: Parada  |  R1: Tajo Pesado",
+  "CTRL_7": "MENU: Sistema | RUN+MENU: Loader"
+}

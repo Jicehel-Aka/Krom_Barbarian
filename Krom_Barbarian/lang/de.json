@@ -1,0 +1,23 @@
+{
+  "MENU_TITLE": "AKA-SYSTEMMENU",
+  "MENU_RESUME": "Zuruck zum Spiel",
+  "MENU_GAME_SELECT": "Titelbildschirm",
+  "MENU_CONTROLS": "Steuerung",
+  "MENU_LANGUAGE": "Sprache",
+  "MENU_VOLUME": "Lautstarke",
+  "MENU_VOL_MUSIC": "Musik",
+  "MENU_VOL_SFX": "Soundeffekte",
+  "MENU_CREDITS": "Credits",
+  "MENU_RETURN_LOADER": "Zuruck zum Loader",
+  "MENU_LEGEND": "A:OK  C/MENU:Zuruck",
+  "CREDITS_AUTHOR": "Autor:",
+  "CREDITS_LICENSE": "Lizenz:",
+  "CREDITS_SOURCE": "Quellcode & Release:",
+  "CTRL_1": "Stick/DPad: Gehen / Sprung / Ducken",
+  "CTRL_2": "A: Schneller Hieb / Stich",
+  "CTRL_3": "B: Tiefer Feger",
+  "CTRL_4": "C: 360-Enthauptungswirbel",
+  "CTRL_5": "D: Ausweichrolle",
+  "CTRL_6": "L1: Parade  |  R1: Schwerer Spalter",
+  "CTRL_7": "MENU: System | RUN+MENU: Loader"
+}

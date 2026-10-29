@@ -1,0 +1,6 @@
+{
+  "name": "Krom : Le Glaive d'Acier — Gamebuino AKA",
+  "description": "Jeu de combat à l'épée et d'aventure en pixel art style Barbarian pour Gamebuino AKA et PC, avec histoire, progression, boss redoutables et multijoueur local WiFi ou câble USB.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

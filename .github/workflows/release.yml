@@ -1,0 +1,122 @@
+name: Release Gamebuino AKA & PC (On-Demand)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag de version de la release (ex: v1.0.0)"
+        required: true
+        default: "v1.0.0"
+        type: string
+      release_title:
+        description: "Titre de la release"
+        required: false
+        default: "Krom : Le Glaive d'Acier — Édition Gamebuino AKA (320x240)"
+        type: string
+      prerelease:
+        description: "Marquer comme pré-version (pre-release)"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Firmware AKA & Serveur PC + Création Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
+      - name: Déterminer la version de la release
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TITLE="${{ inputs.release_title }}"
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+            TITLE="Krom : Le Glaive d'Acier — ${GITHUB_REF_NAME}"
+            PRERELEASE="false"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Configuration de Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Installation des dépendances et vérification TypeScript
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Compilation Firmware ESP32-S3 Gamebuino AKA (ESP-IDF v5.3.2)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32s3
+          path: firmware_aka_esp32s3
+
+      - name: Préparation de l'archive Carte microSD Gamebuino AKA (/Krom_Barbarian/Firmware.bin)
+        run: |
+          mkdir -p release_out
+          test -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin"
+          test -f "Krom_Barbarian/config.ini"
+          cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "Krom_Barbarian/Firmware.bin"
+          cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "release_out/Firmware.bin"
+          zip -r "release_out/Krom_Barbarian_Gamebuino_AKA_SD_${{ steps.meta.outputs.version }}.zip" \
+            Krom_Barbarian/
+
+      - name: Création de l'archive Serveur PC & Simulateur 320x240
+        run: |
+          zip -r "release_out/Krom_Barbarian_PC_Multiplayer_${{ steps.meta.outputs.version }}.zip" \
+            dist/ \
+            public/ \
+            src/ \
+            server.ts \
+            package.json \
+            package-lock.json \
+            tsconfig.json \
+            vite.config.ts \
+            index.html \
+            metadata.json \
+            README.md
+
+      - name: Génération des notes de version
+        run: |
+          cat << 'EOF' > release_out/RELEASE_NOTES.md
+          ## Krom : Le Glaive d'Acier — Gamebuino AKA (ESP32-S3 · 320×240) & PC
+
+          ### Contenu de cette Release (${{ steps.meta.outputs.version }})
+          1. **`Krom_Barbarian_Gamebuino_AKA_SD_${{ steps.meta.outputs.version }}.zip`** & **`Firmware.bin`** :
+             - Binaire natif ESP32-S3R8 compilé via ESP-IDF v5.3.2 prêt pour le **Bootloader SD Gamebuino AKA** (`/Krom_Barbarian/Firmware.bin`).
+             - Écran **ST7789V 320×240 non tactile**, support complet **Joystick analogique**, **Croix**, **A, B, C, D**, **L1, R1**, **RUN** et **MENU**.
+             - Campagne 4 actes, cinématiques passables, Forge & bottes secrètes, guide de combat, impacts localisés (**Soft / Normal / Gore**) et bande-son longue structurée en thèmes répétés, variations et ponts musicaux.
+             - Menu système officiel `aka_runtime` sur **MENU** (Pause, Volumes Musique/Sons séparés, **6 langues**, Commandes, Crédits, Retour au Loader `OTA_1`).
+          2. **`Krom_Barbarian_PC_Multiplayer_${{ steps.meta.outputs.version }}.zip`** :
+             - Jeu PC & Serveur Multijoueur local temps réel (**WiFi WebSocket** et **Câble USB 115200 bauds** entre le PC et la Gamebuino AKA).
+          EOF
+
+      - name: Publication de la Release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.version }}
+          name: ${{ steps.meta.outputs.title }}
+          body_path: release_out/RELEASE_NOTES.md
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          files: |
+            release_out/Firmware.bin
+            release_out/Krom_Barbarian_Gamebuino_AKA_SD_${{ steps.meta.outputs.version }}.zip
+            release_out/Krom_Barbarian_PC_Multiplayer_${{ steps.meta.outputs.version }}.zip

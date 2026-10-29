@@ -1,0 +1,23 @@
+{
+  "MENU_TITLE": "AKA SYSTEM MENU",
+  "MENU_RESUME": "Resume game",
+  "MENU_GAME_SELECT": "Title Screen",
+  "MENU_CONTROLS": "Controls",
+  "MENU_LANGUAGE": "Language",
+  "MENU_VOLUME": "Audio volume",
+  "MENU_VOL_MUSIC": "Music",
+  "MENU_VOL_SFX": "Sound effects",
+  "MENU_CREDITS": "Credits",
+  "MENU_RETURN_LOADER": "Return to Loader",
+  "MENU_LEGEND": "A:Confirm  C/MENU:Back",
+  "CREDITS_AUTHOR": "Author:",
+  "CREDITS_LICENSE": "License:",
+  "CREDITS_SOURCE": "Source & Release:",
+  "CTRL_1": "Stick/DPad: Move / Jump / Crouch",
+  "CTRL_2": "A: Quick Slash / Thrust",
+  "CTRL_3": "B: Low Sweep",
+  "CTRL_4": "C: 360 Decapitating Spin",
+  "CTRL_5": "D: Dodge Roll",
+  "CTRL_6": "L1: Parry  |  R1: Heavy Cleave",
+  "CTRL_7": "MENU: System | RUN+MENU: Loader"
+}

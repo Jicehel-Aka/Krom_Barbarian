@@ -1,0 +1,25 @@
+name: CI — Build & Firmware Check
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Verify Gamebuino AKA ESP32-S3 Firmware & SD Folder
+        run: |
+          test -f "firmware_aka_esp32s3/main/main.cpp"
+          test -f "firmware_aka_esp32s3/main/krom_assets.h"
+          test -f "Krom_Barbarian/config.ini"
