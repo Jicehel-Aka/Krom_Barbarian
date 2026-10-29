@@ -54,11 +54,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
 
       - name: Installation des dépendances et vérification TypeScript
         run: |
-          npm ci
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
           npm run lint
           npm run build
 
@@ -72,6 +75,7 @@ jobs:
       - name: Préparation de l'archive Carte microSD Gamebuino AKA (/Krom_Barbarian/Firmware.bin)
         run: |
           mkdir -p release_out
+          sudo chown -R "$USER:$USER" firmware_aka_esp32s3/build || true
           test -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin"
           test -f "Krom_Barbarian/config.ini"
           cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "Krom_Barbarian/Firmware.bin"
@@ -87,12 +91,14 @@ jobs:
             src/ \
             server.ts \
             package.json \
-            package-lock.json \
             tsconfig.json \
             vite.config.ts \
             index.html \
             metadata.json \
             README.md
+          if [ -f package-lock.json ]; then
+            zip -u "release_out/Krom_Barbarian_PC_Multiplayer_${{ steps.meta.outputs.version }}.zip" package-lock.json
+          fi
 
       - name: Génération des notes de version
         run: |

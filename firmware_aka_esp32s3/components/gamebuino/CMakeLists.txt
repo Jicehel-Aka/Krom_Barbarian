@@ -29,6 +29,10 @@ idf_component_register(
         esp_adc 
         esp_driver_i2c 
         esp_driver_gpio 
+        esp_driver_sdmmc
+        driver
+        sdmmc
+        esp_pm
         spi_flash 
         esp_psram 
         esp_lcd 
@@ -38,4 +42,6 @@ idf_component_register(
     
     INCLUDE_DIRS "include_lib" "include_ll"
 )
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-deprecated-declarations -Wno-unused-variable)
 

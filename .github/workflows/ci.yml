@@ -1,25 +1,87 @@
-name: CI — Build & Firmware Check
+name: CI — Build Web & Firmware Gamebuino AKA
 
 on:
   push:
     branches: ["main", "master"]
   pull_request:
     branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  verify:
+  build-web-and-aka:
+    name: Build Web + Compile Firmware.bin (ESP32-S3)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configuration de Node.js 22
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - name: Verify Gamebuino AKA ESP32-S3 Firmware & SD Folder
+
+      - name: Installation des dépendances et build Web/PC
         run: |
-          test -f "firmware_aka_esp32s3/main/main.cpp"
-          test -f "firmware_aka_esp32s3/main/krom_assets.h"
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
+          npm run lint
+          npm run build
+
+      - name: Compilation Firmware ESP32-S3 Gamebuino AKA (ESP-IDF v5.3.2)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32s3
+          path: firmware_aka_esp32s3
+
+      - name: Empaquetage /Krom_Barbarian/Firmware.bin pour Carte microSD AKA
+        run: |
+          mkdir -p release_out
+          sudo chown -R "$USER:$USER" firmware_aka_esp32s3/build || true
+          test -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin"
           test -f "Krom_Barbarian/config.ini"
+          cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "Krom_Barbarian/Firmware.bin"
+          cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "release_out/Firmware.bin"
+          zip -r "release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip" Krom_Barbarian/
+
+      - name: Publication des artefacts Actions (Firmware.bin & Pack SD)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Krom_Barbarian_Gamebuino_AKA_Firmware
+          path: |
+            release_out/Firmware.bin
+            release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip
+
+      - name: Commit automatique de Krom_Barbarian/Firmware.bin dans le dépôt
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f Krom_Barbarian/Firmware.bin
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(aka): update compiled Krom_Barbarian/Firmware.bin [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}" || echo "Push ignoré (branche protégée), Firmware.bin disponible dans Releases & Artifacts."
+          fi
+
+      - name: Mise à jour automatique de la Release 'latest' avec Firmware.bin
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Krom : Le Glaive d'Acier — Dernier Build Gamebuino AKA (Firmware.bin)"
+          body: |
+            Build automatique généré depuis la branche principale.
+            - **`Krom_Barbarian_Gamebuino_AKA_SD.zip`** : décompressez le dossier `Krom_Barbarian/` à la racine de la carte microSD de votre Gamebuino AKA.
+            - **`Firmware.bin`** : binaire ESP32-S3 compilé seul (`/Krom_Barbarian/Firmware.bin`).
+          prerelease: false
+          files: |
+            release_out/Firmware.bin
+            release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip
