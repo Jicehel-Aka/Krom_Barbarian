@@ -48,8 +48,12 @@ jobs:
           sudo chown -R "$USER:$USER" firmware_aka_esp32s3/build || true
           test -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin"
           test -f "Krom_Barbarian/config.ini"
+          test -f "Krom_Barbarian/screen.bmp"
+          test -f "Krom_Barbarian/Picture.png"
           cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "Krom_Barbarian/Firmware.bin"
           cp -f "firmware_aka_esp32s3/build/krom_barbarian_aka.bin" "release_out/Firmware.bin"
+          cp -f "Krom_Barbarian/Picture.png" "release_out/Picture.png"
+          cp -f "Krom_Barbarian/screen.bmp" "release_out/screen.bmp"
           zip -r "release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip" Krom_Barbarian/
 
       - name: Publication des artefacts Actions (Firmware.bin & Pack SD)
@@ -58,6 +62,8 @@ jobs:
           name: Krom_Barbarian_Gamebuino_AKA_Firmware
           path: |
             release_out/Firmware.bin
+            release_out/Picture.png
+            release_out/screen.bmp
             release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip
 
       - name: Commit automatique de Krom_Barbarian/Firmware.bin dans le dépôt
@@ -84,4 +90,6 @@ jobs:
           prerelease: false
           files: |
             release_out/Firmware.bin
+            release_out/Picture.png
+            release_out/screen.bmp
             release_out/Krom_Barbarian_Gamebuino_AKA_SD.zip

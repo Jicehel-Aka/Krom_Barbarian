@@ -6,7 +6,9 @@ Ce dossier correspond à l'arborescence officielle `/Krom_Barbarian/` attendue p
 
 ```text
 /Krom_Barbarian/
-  ├── Firmware.bin          # Binaire exécutable ESP32-S3 compilé via ESP-IDF v5.3.2
+  ├── Firmware.bin          # Binaire exécutable ESP32-S3 compilé via ESP-IDF v5.4.1
+  ├── screen.bmp            # Vignette 160x120 (BMP 24 bits) affichée dans le Loader AKA
+  ├── Picture.png           # Visuel 320x240 affiché sur le portail de téléchargement
   ├── config.ini            # Métadonnées Loader AKA
   └── lang/                 # Tables de traductions du Menu Système AKA (6 langues)
       ├── fr.json

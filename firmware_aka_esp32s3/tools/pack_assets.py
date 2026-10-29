@@ -9,7 +9,9 @@ Transparent color key: 0xF81F
 """
 
 import os
+import shutil
 import struct
+import subprocess
 import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -39,6 +41,17 @@ def paeth(a: int, b: int, c: int) -> int:
 
 
 def read_png_rgba(path: str):
+    if shutil.which("identify") and shutil.which("convert"):
+        ident = (
+            subprocess.check_output(["identify", "-format", "%w %h", path])
+            .decode("ascii")
+            .split()
+        )
+        width, height = int(ident[0]), int(ident[1])
+        raw_rgba = subprocess.check_output(["convert", path, "-depth", "8", "rgba:-"])
+        if len(raw_rgba) == width * height * 4:
+            return width, height, bytearray(raw_rgba)
+
     with open(path, "rb") as f:
         data = f.read()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
@@ -83,24 +96,25 @@ def read_png_rgba(path: str):
         src += 1
         row_out = y * stride
         prev_out = (y - 1) * stride
-        for i in range(stride):
-            x_byte = raw[src + i]
-            a = recon[row_out + i - bpp] if i >= bpp else 0
-            b = recon[prev_out + i] if y > 0 else 0
-            c = recon[prev_out + i - bpp] if (y > 0 and i >= bpp) else 0
-            if ftype == 0:
-                val = x_byte
-            elif ftype == 1:
-                val = (x_byte + a) & 0xFF
-            elif ftype == 2:
-                val = (x_byte + b) & 0xFF
-            elif ftype == 3:
-                val = (x_byte + ((a + b) >> 1)) & 0xFF
-            elif ftype == 4:
-                val = (x_byte + paeth(a, b, c)) & 0xFF
-            else:
-                raise ValueError(f"Unknown PNG filter {ftype}")
-            recon[row_out + i] = val
+        if ftype == 0:
+            recon[row_out : row_out + stride] = raw[src : src + stride]
+        else:
+            for i in range(stride):
+                x_byte = raw[src + i]
+                a = recon[row_out + i - bpp] if i >= bpp else 0
+                b = recon[prev_out + i] if y > 0 else 0
+                c = recon[prev_out + i - bpp] if (y > 0 and i >= bpp) else 0
+                if ftype == 1:
+                    val = (x_byte + a) & 0xFF
+                elif ftype == 2:
+                    val = (x_byte + b) & 0xFF
+                elif ftype == 3:
+                    val = (x_byte + ((a + b) >> 1)) & 0xFF
+                elif ftype == 4:
+                    val = (x_byte + paeth(a, b, c)) & 0xFF
+                else:
+                    raise ValueError(f"Unknown PNG filter {ftype}")
+                recon[row_out + i] = val
         src += stride
 
     rgba = bytearray(width * height * 4)
@@ -196,6 +210,98 @@ def pack_stage_256(path: str):
     return pal_bgr565, bytes(indices)
 
 
+def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, bw: int, bh: int):
+    """Extracts (bx, by, bw, bh) with a 2px border and runs a 3-stage #FF00FF chroma-key
+    + exterior magenta halo erosion + dark-outline magenta de-spill, preserving all
+    interior purple/amethyst details (e.g. Seigneur Drax's armor & runes)."""
+    pad = 2
+    x0 = bx - pad
+    y0 = by - pad
+    cw = bw + pad * 2
+    ch = bh + pad * 2
+    crop = bytearray(cw * ch * 4)
+    opaque = bytearray(cw * ch)
+
+    # Stage 1: Core alpha & #FF00FF chroma-key removal
+    for cy in range(ch):
+        sy = y0 + cy
+        if sy < 0 or sy >= sh:
+            continue
+        src_row = sy * sw * 4
+        dst_row = cy * cw
+        for cx in range(cw):
+            sx = x0 + cx
+            if sx < 0 or sx >= sw:
+                continue
+            soff = src_row + sx * 4
+            r = rgba[soff]
+            g = rgba[soff + 1]
+            b = rgba[soff + 2]
+            a = rgba[soff + 3]
+            if a < 128:
+                continue
+            if r > 195 and b > 190 and g < 85 and (r + b - g * 2) > 225:
+                continue
+            idx = dst_row + cx
+            doff = idx * 4
+            crop[doff] = r
+            crop[doff + 1] = g
+            crop[doff + 2] = b
+            crop[doff + 3] = 255
+            opaque[idx] = 1
+
+    def touches_transparent(mask: bytearray, cx: int, cy: int, radius: int = 1) -> bool:
+        for ny in range(cy - radius, cy + radius + 1):
+            if ny < 0 or ny >= ch:
+                return True
+            row = ny * cw
+            for nx in range(cx - radius, cx + radius + 1):
+                if nx < 0 or nx >= cw:
+                    return True
+                if mask[row + nx] == 0:
+                    return True
+        return False
+
+    # Stage 2: 2-pass exterior anti-aliased pink/magenta fringe erosion (8-connected to bg)
+    for _ in range(2):
+        prev = bytearray(opaque)
+        for cy in range(ch):
+            row = cy * cw
+            for cx in range(cw):
+                idx = row + cx
+                if prev[idx] == 0 or not touches_transparent(prev, cx, cy, 1):
+                    continue
+                doff = idx * 4
+                r, g, b = crop[doff], crop[doff + 1], crop[doff + 2]
+                if (
+                    r > 135
+                    and b > 130
+                    and r > g + 46
+                    and b > g + 46
+                    and abs(r - b) < 42
+                ):
+                    opaque[idx] = 0
+                    crop[doff + 3] = 0
+
+    # Stage 3: Neutralize dark-magenta spill on the outer 2px source ring (= 1px at 0.35x AKA scale)
+    prev = bytearray(opaque)
+    for cy in range(ch):
+        row = cy * cw
+        for cx in range(cw):
+            idx = row + cx
+            if prev[idx] == 0 or not touches_transparent(prev, cx, cy, 2):
+                continue
+            doff = idx * 4
+            r, g, b = crop[doff], crop[doff + 1], crop[doff + 2]
+            if r > g + 20 and b > g + 20 and abs(r - b) < 52:
+                lum = int(round(g * 0.72 + min(r, b) * 0.18))
+                crop[doff] = lum
+                crop[doff + 1] = lum
+                crop[doff + 2] = lum
+
+    return pad, cw, crop, opaque
+
+
 def extract_scaled_sprite_rle(sheet_img, box, scale: float):
     sw, sh, rgba = sheet_img
     bx, by, bw, bh, bax = box
@@ -203,20 +309,22 @@ def extract_scaled_sprite_rle(sheet_img, box, scale: float):
     dh = max(1, int(round(bh * scale)))
     dax = int(round(bax * scale))
 
+    pad, cw, crop, opaque = clean_cropped_box_rgba(sw, sh, rgba, bx, by, bw, bh)
+
     words = []
     for dy in range(dh):
-        sy = min(sh - 1, by + int((dy + 0.5) * bh / dh))
+        cy = pad + min(bh - 1, int((dy + 0.5) * bh / dh))
+        row = cy * cw
         for dx in range(dw):
-            sx = min(sw - 1, bx + int((dx + 0.5) * bw / dw))
-            off = (sy * sw + sx) * 4
-            r, g, b, a = rgba[off], rgba[off + 1], rgba[off + 2], rgba[off + 3]
-            if a < 115:
+            cx = pad + min(bw - 1, int((dx + 0.5) * bw / dw))
+            idx = row + cx
+            if opaque[idx] == 0:
                 words.append(TRANSPARENT_KEY)
             else:
-                words.append(lcd_color_rgb(r, g, b))
+                doff = idx * 4
+                words.append(lcd_color_rgb(crop[doff], crop[doff + 1], crop[doff + 2]))
 
-    # RLE encode: pairs of (count: uint16_t, color: uint16_t) -> very fast & compact!
-    # Even tighter: byte stream where:
+    # RLE encode: byte stream where:
     #   0x00..0x7F (n): (n + 1) transparent pixels
     #   0x80..0xBF (n): (n - 0x80 + 1) identical opaque pixels followed by 1 uint16_t LE
     #   0xC0..0xFF (n): (n - 0xC0 + 1) literal opaque pixels followed by count * uint16_t LE

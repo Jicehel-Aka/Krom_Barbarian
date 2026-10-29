@@ -595,7 +595,7 @@ static void drawSpriteAnchored(uint16_t spriteId, int footX, int footY, int faci
     const bool flipX = (facing < 0);
     const int drawX = flipX ? (footX - (sp.w - sp.ax)) : (footX - sp.ax);
     const int drawY = footY - sp.h;
-    const uint16_t white = lcd_color_rgb(255, 245, 220);
+    const uint16_t whiteHalf = (lcd_color_rgb(255, 245, 220) & 0xF7DEu) >> 1;
 
     for (int dy = 0; dy < sp.h; ++dy) {
         int py = drawY + dy;
@@ -608,7 +608,7 @@ static void drawSpriteAnchored(uint16_t spriteId, int footX, int footY, int faci
             int sx = flipX ? (sp.w - 1 - dx) : dx;
             uint16_t c = row[sx];
             if (c != KROM_TRANSPARENT) {
-                dstRow[px] = flashWhite ? white : c;
+                dstRow[px] = flashWhite ? static_cast<uint16_t>(((c & 0xF7DEu) >> 1) + whiteHalf) : c;
             }
         }
     }
@@ -1029,10 +1029,21 @@ static void startDuel(SkinId enemySkin, uint8_t stageIdx, bool campaignDuel) {
 static inline bool justPressed(uint32_t mask) { return (g_keys.pressed & mask) != 0; }
 
 static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
-    if (p.act == ACT_DEAD || p.act == ACT_DECAPITATED || p.act == ACT_VICTORY) return;
     if (p.parryWindow > 0) p.parryWindow--;
     if (p.riposteBuff > 0) p.riposteBuff--;
     if (p.hitFlash > 0) p.hitFlash--;
+    if (p.act == ACT_DEAD || p.act == ACT_DECAPITATED || p.act == ACT_VICTORY) {
+        if (p.timer > 0) p.timer--;
+        if (p.y < GROUND_Y || p.vy != 0.0f) {
+            p.y += p.vy;
+            p.vy += 0.55f;
+            if (p.y >= GROUND_Y) {
+                p.y = GROUND_Y;
+                p.vy = 0.0f;
+            }
+        }
+        return;
+    }
 
     if (p.timer > 0) {
         p.timer--;
@@ -1210,6 +1221,7 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
     const bool lethalOrVulnerable = (def.hp <= (isMinionTarget ? 28 : 48)) || (def.act == ACT_HIT);
     if (canDecap && lethalOrVulnerable && dx >= 22.0f && dx <= 52.0f) {
         def.hp = 0;
+        def.hitFlash = 2;
         def.act = ACT_DECAPITATED;
         def.timer = 60;
         sfxDecapitate();
@@ -1217,11 +1229,13 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
         g_hitstop = 8;
         g_shake = 8;
         if (!isMinionTarget) {
-            g_headActive = true;
-            g_headX = def.x;
-            g_headY = def.y - 48.0f;
-            g_headVx = atk.facing * 2.8f;
-            g_headVy = -5.2f;
+            if (g_impactMode != IMPACT_SOFT) {
+                g_headActive = true;
+                g_headX = def.x;
+                g_headY = def.y - 48.0f;
+                g_headVx = atk.facing * 2.8f;
+                g_headVy = -5.2f;
+            }
             showBanner("DECAPITATION !!", 85);
             if (&atk == &g_p1) { g_score += 500; g_shards += 18; }
         } else {
@@ -1233,7 +1247,6 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
 
     // Standard / Heavy Blade Hit
     def.hp -= dmg;
-    def.hitFlash = 5;
     def.x += atk.facing * (guardBreak ? 10.0f : 6.0f);
     sfxHit(guardBreak || canDecap);
     spawnWeaponImpact(hitX, hitY, atk.facing, guardBreak || canDecap, false);
@@ -1242,6 +1255,7 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
 
     if (def.hp <= 0) {
         def.hp = 0;
+        def.hitFlash = 2;
         def.act = ACT_DEAD;
         def.timer = 50;
         if (&atk == &g_p1) {
@@ -1249,15 +1263,27 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
             g_shards += isMinionTarget ? 4 : 12;
         }
     } else {
+        def.hitFlash = 3;
         def.act = ACT_HIT;
         def.timer = 10;
     }
 }
 
 static void stepEnemyAi(Fighter& ai, const Fighter& target, int aggression, float minX, float maxX) {
-    if (ai.act == ACT_DEAD || ai.act == ACT_DECAPITATED || ai.act == ACT_VICTORY) return;
     if (ai.hitFlash > 0) ai.hitFlash--;
     if (ai.parryWindow > 0) ai.parryWindow--;
+    if (ai.act == ACT_DEAD || ai.act == ACT_DECAPITATED || ai.act == ACT_VICTORY) {
+        if (ai.timer > 0) ai.timer--;
+        if (ai.y < GROUND_Y || ai.vy != 0.0f) {
+            ai.y += ai.vy;
+            ai.vy += 0.55f;
+            if (ai.y >= GROUND_Y) {
+                ai.y = GROUND_Y;
+                ai.vy = 0.0f;
+            }
+        }
+        return;
+    }
 
     if (ai.timer > 0) {
         ai.timer--;
@@ -1626,6 +1652,15 @@ static void updateAndDrawTraversal() {
             MinionUnit& m = g_minions[i];
             if (!m.active) continue;
             if (m.f.act == ACT_DEAD || m.f.act == ACT_DECAPITATED) {
+                if (m.f.hitFlash > 0) m.f.hitFlash--;
+                if (m.f.y < GROUND_Y || m.f.vy != 0.0f) {
+                    m.f.y += m.f.vy;
+                    m.f.vy += 0.55f;
+                    if (m.f.y >= GROUND_Y) {
+                        m.f.y = GROUND_Y;
+                        m.f.vy = 0.0f;
+                    }
+                }
                 if (m.f.timer > 0) m.f.timer--;
                 else m.active = false;
                 continue;
@@ -1721,6 +1756,7 @@ static void updateAndDrawDuel() {
                 if (g_p2.hp <= 0) {
                     g_p1Rounds++;
                     g_p1.act = ACT_VICTORY;
+                    g_p1.hitFlash = 0;
                     g_goblinActive = true;
                     g_goblinX = -24.0f;
                     g_goblinTick = 0;
@@ -1728,14 +1764,23 @@ static void updateAndDrawDuel() {
                 } else {
                     g_p2Rounds++;
                     g_p2.act = ACT_VICTORY;
+                    g_p2.hitFlash = 0;
                 }
             }
+            // Keep ticking hitFlash, death/decap timer & gravity during round end!
+            controlPlayerFighter(g_p1, 22.0f, 298.0f);
+            stepEnemyAi(g_p2, g_p1, 1 + g_actIdx, 22.0f, 298.0f);
             g_roundEndTimer++;
 
-            // Goblin cleaner trots in & drags fallen fighter!
+            // Goblin cleaner trots in, laughs, then drags fallen fighter!
             if (g_goblinActive) {
                 g_goblinTick++;
-                if (g_goblinX < g_p2.x - 28.0f) g_goblinX += 2.2f;
+                if (g_goblinTick < 75 && g_goblinX < g_p2.x - 28.0f) {
+                    g_goblinX += 2.2f;
+                } else if (g_goblinTick >= 75) {
+                    g_goblinX -= 1.6f;
+                    g_p2.x -= 1.6f;
+                }
             }
 
             if (g_roundEndTimer > 135) {
@@ -1792,8 +1837,9 @@ static void updateAndDrawDuel() {
     }
 
     if (g_goblinActive) {
-        int gobSlot = (g_goblinX < g_p2.x - 30.0f) ? ((g_goblinTick / 6) & 1) : 2;
-        drawSpriteAnchored(GOBLIN_ANIM_FRAMES[gobSlot], static_cast<int>(g_goblinX), GROUND_Y, 1);
+        int gobSlot = (g_goblinTick >= 75) ? 3 : ((g_goblinX < g_p2.x - 30.0f) ? ((g_goblinTick / 6) & 1) : 2);
+        int gobFacing = (g_goblinTick >= 75) ? -1 : 1;
+        drawSpriteAnchored(GOBLIN_ANIM_FRAMES[gobSlot], static_cast<int>(g_goblinX), GROUND_Y, gobFacing);
     }
 
     drawSpriteAnchored(getFighterSpriteId(g_p2), static_cast<int>(g_p2.x) + shakeX,
