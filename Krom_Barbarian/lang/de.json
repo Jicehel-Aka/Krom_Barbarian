@@ -13,11 +13,11 @@
   "CREDITS_AUTHOR": "Autor:",
   "CREDITS_LICENSE": "Lizenz:",
   "CREDITS_SOURCE": "Quellcode & Release:",
-  "CTRL_1": "Stick/DPad: Gehen / Sprung / Ducken",
+  "CTRL_1": "DPad/Stick: Lauf/Sprung/Ab",
   "CTRL_2": "A: Schneller Hieb / Stich",
   "CTRL_3": "B: Tiefer Feger",
   "CTRL_4": "C: 360-Enthauptungswirbel",
-  "CTRL_5": "D: Ausweichrolle",
-  "CTRL_6": "L1: Parade  |  R1: Schwerer Spalter",
-  "CTRL_7": "MENU: System | RUN+MENU: Loader"
+  "CTRL_5": "D: Ausweichrolle / Schmiede",
+  "CTRL_6": "L1: Parade | R1: Spalter",
+  "CTRL_7": "MENU: Pause | +RUN: Loader"
 }

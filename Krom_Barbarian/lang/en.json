@@ -13,11 +13,11 @@
   "CREDITS_AUTHOR": "Author:",
   "CREDITS_LICENSE": "License:",
   "CREDITS_SOURCE": "Source & Release:",
-  "CTRL_1": "Stick/DPad: Move / Jump / Crouch",
+  "CTRL_1": "DPad/Stick: Move/Jump/Duck",
   "CTRL_2": "A: Quick Slash / Thrust",
   "CTRL_3": "B: Low Sweep",
   "CTRL_4": "C: 360 Decapitating Spin",
-  "CTRL_5": "D: Dodge Roll",
-  "CTRL_6": "L1: Parry  |  R1: Heavy Cleave",
-  "CTRL_7": "MENU: System | RUN+MENU: Loader"
+  "CTRL_5": "D: Dodge Roll / Forge",
+  "CTRL_6": "L1: Parry | R1: Heavy Chop",
+  "CTRL_7": "MENU: Pause | +RUN: Loader"
 }

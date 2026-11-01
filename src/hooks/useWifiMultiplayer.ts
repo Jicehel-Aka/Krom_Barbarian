@@ -5,23 +5,27 @@ import type {
   MatchState,
   MultiplayerRoomSummary,
   StageId,
+  ZoneTraversalState,
 } from '../types/game';
 
 export interface WifiMultiplayerController {
   connected: boolean;
   roomCode: string;
+  roomMode: 'versus' | 'coop';
   role: 'pc' | 'aka' | null;
   hasPc: boolean;
   hasAka: boolean;
   latencyMs: number | null;
   remoteMatch: MatchState | null;
+  remoteZone: ZoneTraversalState | null;
   openRooms: MultiplayerRoomSummary[];
   lanHostHint: string;
-  createRoom: (stage: StageId) => void;
+  createRoom: (stage: StageId, roomMode?: 'versus' | 'coop') => void;
   joinRoom: (code: string, role: 'pc' | 'aka') => void;
   leaveRoom: () => void;
   sendInput: (input: InputState) => void;
   changeStage: (stage: StageId) => void;
+  changeRoomMode: (roomMode: 'versus' | 'coop') => void;
   requestRematch: () => void;
   refreshOpenRooms: () => Promise<void>;
 }
@@ -31,11 +35,13 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
   const lastSentInputKeyRef = useRef<string>('');
   const [connected, setConnected] = useState(false);
   const [roomCode, setRoomCode] = useState('');
+  const [roomMode, setRoomMode] = useState<'versus' | 'coop'>('versus');
   const [role, setRole] = useState<'pc' | 'aka' | null>(null);
   const [hasPc, setHasPc] = useState(false);
   const [hasAka, setHasAka] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [remoteMatch, setRemoteMatch] = useState<MatchState | null>(null);
+  const [remoteZone, setRemoteZone] = useState<ZoneTraversalState | null>(null);
   const [openRooms, setOpenRooms] = useState<MultiplayerRoomSummary[]>([]);
   const [lanHostHint, setLanHostHint] = useState<string>(
     typeof window !== 'undefined' ? window.location.host : 'localhost:3000'
@@ -100,12 +106,21 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
           } else if (msg.type === 'room:joined') {
             setRoomCode(msg.roomCode);
             setRole(msg.role);
+            if (msg.roomMode === 'coop' || msg.roomMode === 'versus') {
+              setRoomMode(msg.roomMode);
+            }
             if (msg.match) setRemoteMatch(msg.match);
+            if (msg.coopZone) setRemoteZone(msg.coopZone);
           } else if (msg.type === 'room:presence') {
             setHasPc(Boolean(msg.hasPc));
             setHasAka(Boolean(msg.hasAka));
+            if (msg.roomMode === 'coop' || msg.roomMode === 'versus') {
+              setRoomMode(msg.roomMode);
+            }
           } else if (msg.type === 'room:state' && msg.match) {
             setRemoteMatch(msg.match);
+          } else if (msg.type === 'room:coop_state' && msg.coopZone) {
+            setRemoteZone(msg.coopZone);
           }
         } catch {
           // Ignore malformed packet
@@ -130,12 +145,16 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
     };
   }, []);
 
-  const createRoom = useCallback((stage: StageId) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    lastSentInputKeyRef.current = '';
-    ws.send(JSON.stringify({ type: 'room:create', stage }));
-  }, []);
+  const createRoom = useCallback(
+    (stage: StageId, targetMode: 'versus' | 'coop' = 'versus') => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      lastSentInputKeyRef.current = '';
+      setRoomMode(targetMode);
+      ws.send(JSON.stringify({ type: 'room:create', stage, roomMode: targetMode }));
+    },
+    []
+  );
 
   const joinRoom = useCallback((code: string, targetRole: 'pc' | 'aka') => {
     const ws = wsRef.current;
@@ -156,6 +175,7 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
     setHasPc(false);
     setHasAka(false);
     setRemoteMatch(null);
+    setRemoteZone(null);
   }, [roomCode]);
 
   const sendInput = useCallback(
@@ -185,6 +205,16 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
     [roomCode]
   );
 
+  const changeRoomMode = useCallback(
+    (targetMode: 'versus' | 'coop') => {
+      setRoomMode(targetMode);
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !roomCode) return;
+      ws.send(JSON.stringify({ type: 'room:mode', roomCode, roomMode: targetMode }));
+    },
+    [roomCode]
+  );
+
   const requestRematch = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !roomCode) return;
@@ -194,11 +224,13 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
   return {
     connected,
     roomCode,
+    roomMode,
     role,
     hasPc,
     hasAka,
     latencyMs,
     remoteMatch,
+    remoteZone,
     openRooms,
     lanHostHint,
     createRoom,
@@ -206,6 +238,7 @@ export function useWifiMultiplayer(): WifiMultiplayerController {
     leaveRoom,
     sendInput,
     changeStage,
+    changeRoomMode,
     requestRematch,
     refreshOpenRooms,
   };

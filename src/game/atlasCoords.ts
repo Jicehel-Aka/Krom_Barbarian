@@ -379,3 +379,21 @@ export const GOBLIN_FX_COORDS = {
   BRAZIER_2: { x: 860, y: 579, w: 147, h: 196, ax: 73 },
   BRAZIER_3: { x: 1025, y: 579, w: 147, h: 196, ax: 73 },
 } as const satisfies Record<string, VerifiedSpriteBox>;
+
+export const DECOR_ANIM_COORDS = {
+  PORTCULLIS_CLOSED: { x: 18, y: 18, w: 308, h: 351, ax: 154 },
+  PORTCULLIS_OPEN: { x: 362, y: 18, w: 308, h: 351, ax: 154 },
+  BANNER_0: { x: 707, y: 35, w: 135, h: 214, ax: 64 },
+  BANNER_1: { x: 873, y: 35, w: 138, h: 213, ax: 64 },
+  BANNER_2: { x: 1039, y: 36, w: 150, h: 212, ax: 63 },
+  BANNER_3: { x: 1209, y: 35, w: 143, h: 199, ax: 63 },
+  CAGE_0: { x: 726, y: 279, w: 93, h: 253, ax: 47 },
+  CAGE_1: { x: 901, y: 277, w: 90, h: 249, ax: 45 },
+  CAGE_2: { x: 1070, y: 279, w: 93, h: 256, ax: 44 },
+  CAGE_3: { x: 1239, y: 279, w: 112, h: 259, ax: 19 },
+  ARCANE_BRAZIER_0: { x: 702, y: 579, w: 144, h: 183, ax: 72 },
+  ARCANE_BRAZIER_1: { x: 874, y: 576, w: 144, h: 187, ax: 72 },
+  ARCANE_BRAZIER_2: { x: 1046, y: 564, w: 144, h: 199, ax: 72 },
+  ARCANE_BRAZIER_3: { x: 1218, y: 574, w: 144, h: 189, ax: 72 },
+} as const satisfies Record<string, VerifiedSpriteBox>;
+

@@ -1,3 +1,8 @@
+import {
+  getLocalizedAct,
+  getLocalizedCombatText,
+  getLocalizedMinion,
+} from '../i18n/gameContentLocale.ts';
 import type {
   FighterAction,
   FighterSkin,
@@ -8,12 +13,12 @@ import type {
   ImpactEffect,
   ImpactEffectKind,
   InputState,
+  LanguageCode,
   MatchState,
   MinionSkin,
   PixelParticle,
   StageId,
   TechniqueId,
-  ZoneEnemyInstance,
   ZoneTraversalState,
   ZoneWaveEnemySpec,
 } from '../types/game';
@@ -24,7 +29,28 @@ export const NATIVE_HEIGHT = 240;
 export const GROUND_Y = 196;
 export const ARENA_MIN_X = 28;
 export const ARENA_MAX_X = 292;
-export const ZONE_WORLD_WIDTH = 960;
+export const ZONE_WORLD_WIDTH = 1800;
+export const ZONE_WALL_GATES = [600, 1200] as const;
+
+interface SweepSpamTracker {
+  streak: number;
+  lastSweepTick: number;
+}
+const matchSweepMap = new WeakMap<MatchState, SweepSpamTracker>();
+const zoneSweepMap = new WeakMap<ZoneTraversalState, SweepSpamTracker>();
+
+function recordPlayerAttackStreak(
+  tracker: SweepSpamTracker,
+  action: FighterAction,
+  tick: number
+): void {
+  if (action === 'sweep_low') {
+    tracker.streak = tick - tracker.lastSweepTick < 150 ? tracker.streak + 1 : 1;
+    tracker.lastSweepTick = tick;
+  } else {
+    tracker.streak = 0;
+  }
+}
 
 export interface CombatAudioCallbacks {
   onSwing?: (heavy: boolean) => void;
@@ -94,12 +120,12 @@ const ATTACK_SPECS: Record<
     knockback: 10,
   },
   sweep_low: {
-    duration: 22,
+    duration: 25,
     activeStart: 9,
     activeEnd: 14,
     range: 56,
     damage: 13,
-    staminaCost: 18,
+    staminaCost: 21,
     heightZone: 'low',
     knockback: 6,
     causesKnockdown: true,
@@ -184,6 +210,94 @@ const MINION_COMBAT_SPECS: Record<
     damageMultiplier: 0.52,
     aggression: 0.39,
     moveSpeed: 1.92,
+  },
+  goblin_scout: {
+    shortName: 'GOBELIN',
+    hp: 18,
+    scoreValue: 140,
+    damageMultiplier: 0.34,
+    aggression: 0.26,
+    moveSpeed: 1.78,
+  },
+  orc_marauder: {
+    shortName: 'ORQUE',
+    hp: 42,
+    scoreValue: 320,
+    damageMultiplier: 0.46,
+    aggression: 0.30,
+    moveSpeed: 1.52,
+  },
+  undead_warrior: {
+    shortName: 'OS-FER',
+    hp: 38,
+    scoreValue: 290,
+    damageMultiplier: 0.44,
+    aggression: 0.31,
+    moveSpeed: 1.68,
+  },
+  risen_zombie: {
+    shortName: 'ZOMBIE',
+    hp: 32,
+    scoreValue: 220,
+    damageMultiplier: 0.40,
+    aggression: 0.23,
+    moveSpeed: 1.28,
+  },
+  dire_wolf: {
+    shortName: 'LOUP NOIR',
+    hp: 26,
+    scoreValue: 210,
+    damageMultiplier: 0.39,
+    aggression: 0.33,
+    moveSpeed: 2.05,
+  },
+  cave_bat: {
+    shortName: 'CHAUVE-S.',
+    hp: 16,
+    scoreValue: 160,
+    damageMultiplier: 0.33,
+    aggression: 0.30,
+    moveSpeed: 2.10,
+  },
+  spectral_wraith: {
+    shortName: 'FANTÔME',
+    hp: 46,
+    scoreValue: 440,
+    damageMultiplier: 0.48,
+    aggression: 0.37,
+    moveSpeed: 1.95,
+  },
+  skeleton_mage: {
+    shortName: 'MAGE OS',
+    hp: 34,
+    scoreValue: 360,
+    damageMultiplier: 0.50,
+    aggression: 0.34,
+    moveSpeed: 1.58,
+  },
+  imperial_halberdier: {
+    shortName: 'GARDE FER',
+    hp: 52,
+    scoreValue: 420,
+    damageMultiplier: 0.49,
+    aggression: 0.35,
+    moveSpeed: 1.66,
+  },
+  stone_golem: {
+    shortName: 'GOLEM',
+    hp: 62,
+    scoreValue: 480,
+    damageMultiplier: 0.54,
+    aggression: 0.25,
+    moveSpeed: 1.22,
+  },
+  abyssal_demon: {
+    shortName: 'DÉMON',
+    hp: 58,
+    scoreValue: 500,
+    damageMultiplier: 0.53,
+    aggression: 0.38,
+    moveSpeed: 1.88,
   },
 };
 
@@ -776,7 +890,10 @@ export function computeBossAIInput(
     ((state.tick * 37 + Math.floor(ai.x * 5) + ai.hp * 13) % 100) / 100;
 
   if (
-    (ai.skin === 'vorgath' || ai.skin === 'drax') &&
+    (ai.skin === 'thalgrim' ||
+      ai.skin === 'vorgath' ||
+      ai.skin === 'baelgor' ||
+      ai.skin === 'drax') &&
     dist > 88 &&
     ai.stamina >= 28 &&
     state.projectiles.length === 0 &&
@@ -805,23 +922,49 @@ export function computeBossAIInput(
     return out;
   }
 
-  if (isAttackAction(target.action) && dist < 72) {
+  const sweepTracker = matchSweepMap.get(state) ?? { streak: 0, lastSweepTick: -999 };
+  const sweepStreak =
+    state.tick - sweepTracker.lastSweepTick < 160 ? sweepTracker.streak : 0;
+
+  // Punish whiffed low sweeps immediately upon landing or close recovery!
+  if (
+    target.action === 'sweep_low' &&
+    target.actionTick >= 13 &&
+    dist < 64 &&
+    ai.y >= GROUND_Y
+  ) {
+    if (roll < 0.55) {
+      out.btnR1 = true;
+    } else {
+      out[towardKey] = true;
+      out.btnA = true;
+    }
+    return out;
+  }
+
+  if (isAttackAction(target.action) && dist < 80) {
     if (target.action === 'spin_decap' && roll < aggression * 0.78) {
       out.down = true;
       return out;
     }
-    if (target.action === 'sweep_low' && roll < aggression * 0.65) {
-      out.up = true;
-      return out;
+    if (target.action === 'sweep_low') {
+      // Anti-B-spam: repeated low sweeps are read and jumped over aggressively!
+      const jumpChance =
+        sweepStreak >= 2 ? 0.92 : Math.min(0.82, 0.42 + aggression * 0.38);
+      if (roll < jumpChance) {
+        out.up = true;
+        if (dist > 34) out[towardKey] = true;
+        return out;
+      }
     }
-    if (roll < aggression * 0.62) {
+    if (target.action !== 'sweep_low' && roll < aggression * 0.64) {
       out.btnL1 = true;
       return out;
     }
   }
 
   if (dist > 62) {
-    if (ai.skin === 'malakor' && dist > 96 && roll < 0.09) {
+    if ((ai.skin === 'malakor' || ai.skin === 'baelgor') && dist > 96 && roll < 0.09) {
       out.btnD = true;
       return out;
     }
@@ -840,9 +983,9 @@ export function computeBossAIInput(
       out.btnA = true;
     } else if (target.hp < target.maxHp * 0.35 && roll < aggression * 0.45) {
       out.btnC = true;
-    } else if (roll < 0.28) {
+    } else if (roll < 0.3) {
       out.btnR1 = true;
-    } else if (roll < 0.62) {
+    } else if (roll < 0.65) {
       out[towardKey] = true;
       out.btnA = true;
     } else {
@@ -924,26 +1067,34 @@ function stepFighterPhysics(
 ): void {
   if (f.action === 'boss_cast' && f.actionTick === 12 && !f.hitApplied) {
     f.hitApplied = true;
-    const isVorgath = f.skin === 'vorgath';
+    const isLowWave = f.skin === 'vorgath' || f.skin === 'thalgrim';
+    const colorTheme =
+      f.skin === 'thalgrim'
+        ? 'crystal'
+        : f.skin === 'vorgath'
+        ? 'lava'
+        : f.skin === 'baelgor'
+        ? 'hellfire'
+        : 'shadow';
+    const particleColor =
+      colorTheme === 'crystal'
+        ? '#38bdf8'
+        : colorTheme === 'lava' || colorTheme === 'hellfire'
+        ? '#f97316'
+        : '#c084fc';
     state.projectiles.push({
       id: state.tick + (f.id === 'p1' ? 1 : 2),
       owner: f.id,
-      kind: isVorgath ? 'shockwave' : 'dark_orb',
+      kind: isLowWave ? 'shockwave' : 'dark_orb',
+      colorTheme,
       x: f.x + f.facing * 24,
-      y: isVorgath ? GROUND_Y - 6 : GROUND_Y - 32,
-      vx: f.facing * (isVorgath ? 4.2 : 5.0),
-      damage: isVorgath ? 16 : 19,
-      lowOnly: isVorgath,
+      y: isLowWave ? GROUND_Y - 6 : GROUND_Y - 32,
+      vx: f.facing * (isLowWave ? 4.2 : 5.0),
+      damage: f.skin === 'thalgrim' ? 15 : f.skin === 'vorgath' ? 16 : f.skin === 'baelgor' ? 18 : 19,
+      lowOnly: isLowWave,
       tick: 0,
     });
-    spawnParticles(
-      state,
-      f.x + f.facing * 24,
-      GROUND_Y - 24,
-      isVorgath ? '#f97316' : '#c084fc',
-      12,
-      3.5
-    );
+    spawnParticles(state, f.x + f.facing * 24, GROUND_Y - 24, particleColor, 12, 3.5);
     audio?.onMagicCast?.();
   }
 
@@ -958,10 +1109,12 @@ function resolveSwordAttack(
   goreMode: GoreMode,
   audio?: CombatAudioCallbacks,
   parryBanner = 'PARADE PARFAITE !',
-  decapBanner = 'COUP FATAL · DÉCAPITATION !'
+  decapBanner = 'COUP FATAL · DÉCAPITATION !',
+  lang: LanguageCode = 'fr'
 ): void {
   if (!isAttackAction(attacker.action) || attacker.hitApplied) return;
   if (defender.action === 'dead' || defender.action === 'decapitated') return;
+  const ct = getLocalizedCombatText(lang);
 
   const spec = ATTACK_SPECS[attacker.action];
   if (attacker.actionTick < spec.activeStart || attacker.actionTick > spec.activeEnd) {
@@ -1028,7 +1181,6 @@ function resolveSwordAttack(
   }
 
   attacker.hitApplied = true;
-  // Exact weapon contact coordinates: clash between crossed blades vs wound on struck target!
   const clashX = attacker.x + attacker.facing * Math.min(28, Math.abs(defender.x - attacker.x) * 0.55);
   const woundX = defender.x - attacker.facing * 5;
   const hitY =
@@ -1069,7 +1221,7 @@ function resolveSwordAttack(
       state.score += 140;
       state.freezeFrames = 6;
       state.screenShake = 7;
-      state.bannerText = 'FENDOIR BRISE-GARDE !';
+      state.bannerText = ct.skyBreakerBanner;
       state.bannerTimer = 46;
       emitWeaponImpact(
         state.impacts,
@@ -1111,7 +1263,7 @@ function resolveSwordAttack(
         attacker.hp = Math.max(1, attacker.hp - 12);
         state.score += 180;
         state.screenShake = 5;
-        state.bannerText = 'RIPOSTE DE FER ! -12 PV';
+        state.bannerText = ct.ironRiposteBanner;
         emitWeaponImpact(
           state.impacts,
           state.particles,
@@ -1159,7 +1311,6 @@ function resolveSwordAttack(
 
   if (canDecapitate) {
     defender.hp = 0;
-    // Soft mode performs a clean, bloodless lightning-steel knockout!
     defender.action = goreMode === 'soft' ? 'dead' : 'decapitated';
     defender.actionTick = 0;
     defender.actionDuration = 999;
@@ -1174,9 +1325,9 @@ function resolveSwordAttack(
     state.screenShake = goreMode === 'gore' ? 12 : 9;
     state.bannerText =
       goreMode === 'soft'
-        ? 'COUP FATAL · ÉCLAIR D’ACIER !'
+        ? ct.softFatalBanner
         : whirlwindBoost
-        ? 'MOULINET DU LOUP · FATAL !'
+        ? ct.whirlwindFatalBanner
         : decapBanner;
     state.bannerTimer = 110;
 
@@ -1440,7 +1591,8 @@ export function stepMatch(
   audio?: CombatAudioCallbacks,
   parryBanner?: string,
   decapBanner?: string,
-  goreMode: GoreMode = 'normal'
+  goreMode: GoreMode = 'normal',
+  lang: LanguageCode = 'fr'
 ): void {
   state.tick += 1;
   if (state.bannerTimer > 0) state.bannerTimer -= 1;
@@ -1459,7 +1611,14 @@ export function stepMatch(
   }
 
   if (!state.roundOver) {
-    applyFighterInput(state.p1, state.p2, p1Input, audio, false);
+    applyFighterInput(state.p1, state.p2, p1Input, audio, false, () => {
+      let trk = matchSweepMap.get(state);
+      if (!trk) {
+        trk = { streak: 0, lastSweepTick: -999 };
+        matchSweepMap.set(state, trk);
+      }
+      recordPlayerAttackStreak(trk, state.p1.action, state.tick);
+    });
     applyFighterInput(state.p2, state.p1, p2Input, audio, false);
   }
 
@@ -1492,7 +1651,8 @@ export function stepMatch(
       goreMode,
       audio,
       parryBanner,
-      decapBanner
+      decapBanner,
+      lang
     );
     resolveSwordAttack(
       state.p2,
@@ -1502,7 +1662,8 @@ export function stepMatch(
       goreMode,
       audio,
       parryBanner,
-      decapBanner
+      decapBanner,
+      lang
     );
   }
 
@@ -1510,8 +1671,134 @@ export function stepMatch(
 }
 
 // ============================================================================
-// SIDE-SCROLLING ZONE TRAVERSAL ENGINE (Double Dragon / Golden Axe Style!)
+// SIDE-SCROLLING ZONE TRAVERSAL ENGINE (Solo & 2-Player Co-op Horde!)
 // ============================================================================
+const BOSS_ZONE_SPECS: Record<
+  'gorgar' | 'thalgrim' | 'vorgath' | 'malakor' | 'baelgor' | 'drax',
+  {
+    actIndex: number;
+    hp: number;
+    scoreValue: number;
+    damageMultiplier: number;
+    aggression: number;
+    moveSpeed: number;
+  }
+> = {
+  gorgar: {
+    actIndex: 0,
+    hp: 195,
+    scoreValue: 1800,
+    damageMultiplier: 1.0,
+    aggression: 0.48,
+    moveSpeed: 1.65,
+  },
+  thalgrim: {
+    actIndex: 1,
+    hp: 215,
+    scoreValue: 2100,
+    damageMultiplier: 1.06,
+    aggression: 0.52,
+    moveSpeed: 1.62,
+  },
+  vorgath: {
+    actIndex: 2,
+    hp: 235,
+    scoreValue: 2400,
+    damageMultiplier: 1.12,
+    aggression: 0.56,
+    moveSpeed: 1.7,
+  },
+  malakor: {
+    actIndex: 3,
+    hp: 255,
+    scoreValue: 2800,
+    damageMultiplier: 1.16,
+    aggression: 0.62,
+    moveSpeed: 1.92,
+  },
+  baelgor: {
+    actIndex: 4,
+    hp: 280,
+    scoreValue: 3200,
+    damageMultiplier: 1.22,
+    aggression: 0.66,
+    moveSpeed: 1.88,
+  },
+  drax: {
+    actIndex: 5,
+    hp: 320,
+    scoreValue: 4000,
+    damageMultiplier: 1.28,
+    aggression: 0.72,
+    moveSpeed: 1.85,
+  },
+};
+
+const ACT_BOSS_SKINS: readonly (
+  | 'gorgar'
+  | 'thalgrim'
+  | 'vorgath'
+  | 'malakor'
+  | 'baelgor'
+  | 'drax'
+)[] = ['gorgar', 'thalgrim', 'vorgath', 'malakor', 'baelgor', 'drax'];
+
+export function buildCoopHordeWaves(
+  baseWaves: ZoneWaveEnemySpec[],
+  actIndex: number
+): ZoneWaveEnemySpec[] {
+  const safeAct = Math.max(0, Math.min(ACT_BOSS_SKINS.length - 1, actIndex));
+  const bossSkin = ACT_BOSS_SKINS[safeAct];
+  const out: ZoneWaveEnemySpec[] = [];
+
+  baseWaves.forEach((w, idx) => {
+    out.push({ ...w });
+    // Reinforce every pocket with an extra monster (including rear pincer ambushes & extra rations)
+    const flankLeft = idx % 3 === 1 && w.triggerX >= 220;
+    out.push({
+      skin: w.skin,
+      triggerX: Math.min(ZONE_WORLD_WIDTH - 220, w.triggerX + 18),
+      spawnX: Math.min(ZONE_WORLD_WIDTH - 28, w.spawnX + 38),
+      gateX: w.gateX,
+      fromLeft: flankLeft,
+      dropKind:
+        idx % 4 === 1 ? 'meat_heal' : idx % 5 === 3 ? 'steel_shard' : undefined,
+    });
+  });
+
+  // Final Co-op Boss Ambush + 2 Elite Escorts at the end of the 1800px panorama!
+  const guardSkinA = baseWaves[baseWaves.length - 1]?.skin ?? 'orc_berserker';
+  const guardSkinB = baseWaves[Math.max(0, baseWaves.length - 2)]?.skin ?? 'skeleton_mage';
+
+  out.push(
+    {
+      skin: guardSkinA,
+      triggerX: 1450,
+      spawnX: 1715,
+      gateX: 1756,
+      dropKind: 'meat_heal',
+    },
+    {
+      skin: bossSkin,
+      triggerX: 1465,
+      spawnX: 1748,
+      gateX: 1756,
+      isBossFinale: true,
+      dropKind: 'steel_shard',
+    },
+    {
+      skin: guardSkinB,
+      triggerX: 1480,
+      spawnX: 1765,
+      gateX: 1756,
+      fromLeft: true,
+    }
+  );
+
+  out.sort((a, b) => a.triggerX - b.triggerX);
+  return out;
+}
+
 export interface CreateZoneOptions {
   stage: StageId;
   actIndex: number;
@@ -1522,6 +1809,8 @@ export interface CreateZoneOptions {
   p1MaxStamina: number;
   p1DamageMult: number;
   p1DecapBonus: number;
+  isCoop?: boolean;
+  p2Name?: string;
 }
 
 export function createZoneTraversal(opts: CreateZoneOptions): ZoneTraversalState {
@@ -1534,8 +1823,27 @@ export function createZoneTraversal(opts: CreateZoneOptions): ZoneTraversalState
     opts.p1DamageMult,
     opts.p1DecapBonus
   );
-  p1.x = 58;
+  p1.x = 52;
   p1.facing = 1;
+
+  let p2: FighterState | null = null;
+  if (opts.isCoop) {
+    p2 = createFighter(
+      'p2',
+      opts.p2Name ?? 'KAELEN J2',
+      'rival_aka',
+      opts.p1MaxHp,
+      opts.p1MaxStamina,
+      opts.p1DamageMult,
+      opts.p1DecapBonus
+    );
+    p2.x = 82;
+    p2.facing = 1;
+  }
+
+  const waves = opts.isCoop
+    ? buildCoopHordeWaves(opts.waves, opts.actIndex)
+    : opts.waves.map((w) => ({ ...w }));
 
   return {
     stage: opts.stage,
@@ -1546,10 +1854,15 @@ export function createZoneTraversal(opts: CreateZoneOptions): ZoneTraversalState
     cameraX: 0,
     lockX: ZONE_WORLD_WIDTH,
     goArrowTimer: 60,
+    isCoop: Boolean(opts.isCoop),
     p1,
+    p2,
     alreadyHitUids: [],
+    alreadyHitUidsP2: [],
+    p1DownTicks: 0,
+    p2DownTicks: 0,
     enemies: [],
-    pendingWaves: opts.waves.map((w) => ({ ...w })),
+    pendingWaves: waves,
     pickups: [],
     floatingTexts: [],
     particles: [],
@@ -1564,7 +1877,7 @@ export function createZoneTraversal(opts: CreateZoneOptions): ZoneTraversalState
     comboCount: 0,
     comboTimer: 0,
     slainCount: 0,
-    totalEnemies: opts.waves.length,
+    totalEnemies: waves.length,
     zoneCompleted: false,
     playerDefeated: false,
     bannerText: opts.zoneTitle.toUpperCase(),
@@ -1589,30 +1902,84 @@ function addFloatingScore(
   });
 }
 
-function spawnWaveMinion(zone: ZoneTraversalState, spec: ZoneWaveEnemySpec, uid: number): void {
-  const stats = MINION_COMBAT_SPECS[spec.skin];
+function isBossZoneSkin(
+  skin: FighterSkin
+): skin is 'gorgar' | 'thalgrim' | 'vorgath' | 'malakor' | 'baelgor' | 'drax' {
+  return Object.prototype.hasOwnProperty.call(BOSS_ZONE_SPECS, skin);
+}
+
+function spawnWaveMinion(
+  zone: ZoneTraversalState,
+  spec: ZoneWaveEnemySpec,
+  uid: number,
+  lang: LanguageCode
+): void {
+  let displayName = 'ENNEMI';
+  let hp = 48;
+  let stamina = 80;
+  let damageMultiplier = 0.7;
+  let scoreValue = 250;
+  let aggression = 0.35;
+  let moveSpeed = 1.65;
+
+  if (isBossZoneSkin(spec.skin)) {
+    const bSpec = BOSS_ZONE_SPECS[spec.skin];
+    displayName = getLocalizedAct(bSpec.actIndex, lang).bossName.toUpperCase();
+    hp = spec.bossHpOverride ?? bSpec.hp;
+    stamina = 120;
+    damageMultiplier = bSpec.damageMultiplier;
+    scoreValue = bSpec.scoreValue;
+    aggression = bSpec.aggression;
+    moveSpeed = bSpec.moveSpeed;
+  } else {
+    const mSkin = spec.skin as MinionSkin;
+    const stats = MINION_COMBAT_SPECS[mSkin] ?? MINION_COMBAT_SPECS.goblin_scout;
+    const loc = getLocalizedMinion(mSkin, lang);
+    displayName = loc.shortName;
+    hp = stats.hp;
+    damageMultiplier = stats.damageMultiplier;
+    scoreValue = stats.scoreValue;
+    aggression = stats.aggression;
+    moveSpeed = stats.moveSpeed;
+  }
+
   const f = createFighter(
     'p2',
-    stats.shortName,
+    displayName,
     spec.skin,
-    stats.hp,
-    80,
-    stats.damageMultiplier,
+    hp,
+    stamina,
+    damageMultiplier,
     0
   );
-  f.x = Math.max(zone.cameraX + NATIVE_WIDTH + 16, spec.spawnX);
-  f.facing = -1;
+
+  if (spec.fromLeft) {
+    f.x = Math.max(24, zone.cameraX - 18);
+    f.facing = 1;
+  } else {
+    f.x = Math.max(zone.cameraX + NATIVE_WIDTH + 16, spec.spawnX);
+    f.facing = -1;
+  }
+
   zone.enemies.push({
     uid,
     fighter: f,
-    scoreValue: stats.scoreValue,
-    aggression: stats.aggression,
-    moveSpeed: stats.moveSpeed,
-    attackCooldown: 32 + (uid % 2) * 24,
+    isBossFinale: Boolean(spec.isBossFinale),
+    scoreValue,
+    aggression,
+    moveSpeed,
+    attackCooldown: 30 + (uid % 2) * 22,
     gateX: spec.gateX,
     dropKind: spec.dropKind,
     despawnTimer: 0,
   });
+
+  if (spec.isBossFinale) {
+    const ct = getLocalizedCombatText(lang);
+    zone.bannerText = ct.coopBossArrivalBanner(displayName);
+    zone.bannerTimer = 115;
+    zone.screenShake = 6;
+  }
 }
 
 export function stepZoneTraversal(
@@ -1621,8 +1988,12 @@ export function stepZoneTraversal(
   p1Technique: TechniqueId = 'whirlwind_edge',
   audio?: CombatAudioCallbacks,
   clearBannerText = 'VOIE LIBRE · AVANCEZ VERS L’ARÈNE !',
-  goreMode: GoreMode = 'normal'
+  goreMode: GoreMode = 'normal',
+  lang: LanguageCode = 'fr',
+  p2Input: InputState = EMPTY_INPUT,
+  p2Technique: TechniqueId = 'iron_riposte'
 ): void {
+  const ct = getLocalizedCombatText(lang);
   zone.tick += 1;
   if (zone.bannerTimer > 0) zone.bannerTimer -= 1;
   if (zone.screenShake > 0) zone.screenShake -= 1;
@@ -1645,98 +2016,272 @@ export function stepZoneTraversal(
     return;
   }
 
-  // Spawn pending minions when Krom advances past triggerX (at most 2 living minions on screen at once for clean arcade pacing!)
+  const p2Fighter = zone.isCoop ? zone.p2 ?? null : null;
+  const p1Alive = zone.p1.hp > 0 && zone.p1.action !== 'dead';
+  const p2Alive = Boolean(p2Fighter && p2Fighter.hp > 0 && p2Fighter.action !== 'dead');
+
+  const leadHeroX =
+    p1Alive && p2Alive && p2Fighter
+      ? Math.max(zone.p1.x, p2Fighter.x)
+      : p1Alive
+      ? zone.p1.x
+      : p2Alive && p2Fighter
+      ? p2Fighter.x
+      : zone.p1.x;
+
   const livingEnemies = zone.enemies.filter(
     (e) => e.fighter.action !== 'dead' && e.fighter.action !== 'decapitated'
   );
 
-  if (livingEnemies.length < 2 && zone.pendingWaves.length > 0) {
+  const maxSimultaneousEnemies = zone.isCoop ? 4 : 2;
+  if (livingEnemies.length < maxSimultaneousEnemies && zone.pendingWaves.length > 0) {
     const nextWave = zone.pendingWaves[0];
-    if (zone.p1.x >= nextWave.triggerX || zone.cameraX >= nextWave.triggerX - 40) {
+    if (leadHeroX >= nextWave.triggerX || zone.cameraX >= nextWave.triggerX - 40) {
       zone.pendingWaves.shift();
       const uid = zone.totalEnemies - zone.pendingWaves.length;
-      spawnWaveMinion(zone, nextWave, uid);
+      spawnWaveMinion(zone, nextWave, uid, lang);
     }
   }
 
-  // Recompute active wave gate lockX
+  // Recompute active wave gate lockX: lock at the current pocket's gateX until all pocket waves are spawned & defeated!
   const activeLiving = zone.enemies.filter(
     (e) => e.fighter.action !== 'dead' && e.fighter.action !== 'decapitated'
   );
   if (activeLiving.length > 0) {
     zone.lockX = Math.min(...activeLiving.map((e) => e.gateX));
   } else if (zone.pendingWaves.length > 0) {
-    zone.lockX = ZONE_WORLD_WIDTH;
+    const nextPending = zone.pendingWaves[0];
+    zone.lockX =
+      leadHeroX >= nextPending.triggerX - 8 ? nextPending.gateX : ZONE_WORLD_WIDTH;
   } else {
     zone.lockX = ZONE_WORLD_WIDTH;
   }
 
-  // Nearest living enemy for auto-facing on neutral attack
-  let nearestEnemy: FighterState | null = null;
-  let nearestDist = 9999;
-  for (const inst of activeLiving) {
-    const d = Math.abs(inst.fighter.x - zone.p1.x);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearestEnemy = inst.fighter;
+  const findNearestEnemyFor = (hx: number): FighterState | null => {
+    let best: FighterState | null = null;
+    let bestDist = 9999;
+    for (const inst of activeLiving) {
+      const d = Math.abs(inst.fighter.x - hx);
+      if (d < bestDist) {
+        bestDist = d;
+        best = inst.fighter;
+      }
+    }
+    return best;
+  };
+
+  if (!zone.playerDefeated && !zone.zoneCompleted) {
+    if (p1Alive) {
+      applyFighterInput(zone.p1, findNearestEnemyFor(zone.p1.x), p1Input, audio, true, () => {
+        zone.alreadyHitUids = [];
+        let trk = zoneSweepMap.get(zone);
+        if (!trk) {
+          trk = { streak: 0, lastSweepTick: -999 };
+          zoneSweepMap.set(zone, trk);
+        }
+        recordPlayerAttackStreak(trk, zone.p1.action, zone.tick);
+      });
+    }
+
+    if (p2Alive && p2Fighter) {
+      applyFighterInput(
+        p2Fighter,
+        findNearestEnemyFor(p2Fighter.x),
+        p2Input,
+        audio,
+        true,
+        () => {
+          zone.alreadyHitUidsP2 = [];
+        }
+      );
     }
   }
 
-  if (!zone.playerDefeated && !zone.zoneCompleted) {
-    applyFighterInput(zone.p1, nearestEnemy, p1Input, audio, true, () => {
-      zone.alreadyHitUids = [];
-    });
+  const minPlayerX = Math.max(24, zone.cameraX + 20);
+  const maxPlayerX = zone.isCoop
+    ? Math.min(ZONE_WORLD_WIDTH - 20, zone.lockX, zone.cameraX + NATIVE_WIDTH - 22)
+    : Math.min(ZONE_WORLD_WIDTH - 20, zone.lockX);
+
+  if (p1Alive) {
+    stepFighterPhysicsBounds(zone.p1, minPlayerX, maxPlayerX, 0.48);
+  } else {
+    zone.p1.vx = 0;
+    zone.p1.y = GROUND_Y;
   }
 
-  const minPlayerX = Math.max(24, zone.cameraX + 20);
-  const maxPlayerX = Math.min(ZONE_WORLD_WIDTH - 20, zone.lockX);
-  stepFighterPhysicsBounds(zone.p1, minPlayerX, maxPlayerX, 0.48);
+  if (p2Fighter) {
+    if (p2Alive) {
+      stepFighterPhysicsBounds(p2Fighter, minPlayerX, maxPlayerX, 0.48);
+    } else {
+      p2Fighter.vx = 0;
+      p2Fighter.y = GROUND_Y;
+    }
+  }
 
-  // Smooth horizontal camera tracking (clamped by lockX)
+  // Co-op Second Wind / Ally Revive when standing close to a fallen partner (or pressing D)
+  if (zone.isCoop && p2Fighter && !zone.playerDefeated) {
+    if (!p1Alive && p2Alive) {
+      zone.p1DownTicks = (zone.p1DownTicks ?? 0) + 1;
+      if (
+        Math.abs(p2Fighter.x - zone.p1.x) <= 34 &&
+        (zone.p1DownTicks >= 42 || p2Input.btnD)
+      ) {
+        zone.p1.hp = Math.max(28, Math.round(zone.p1.maxHp * 0.45));
+        zone.p1.stamina = zone.p1.maxStamina;
+        zone.p1.action = 'idle';
+        zone.p1.actionTick = 0;
+        zone.p1DownTicks = 0;
+        addFloatingScore(zone, zone.p1.x, GROUND_Y - 56, ct.coopRevivePopup, '#4ade80');
+        pushParticles(zone.particles, zone.p1.x, GROUND_Y - 24, '#4ade80', 12, 3.0);
+        audio?.onClash?.(true);
+      }
+    } else {
+      zone.p1DownTicks = 0;
+    }
+
+    if (!p2Alive && p1Alive) {
+      zone.p2DownTicks = (zone.p2DownTicks ?? 0) + 1;
+      if (
+        Math.abs(zone.p1.x - p2Fighter.x) <= 34 &&
+        (zone.p2DownTicks >= 42 || p1Input.btnD)
+      ) {
+        p2Fighter.hp = Math.max(28, Math.round(p2Fighter.maxHp * 0.45));
+        p2Fighter.stamina = p2Fighter.maxStamina;
+        p2Fighter.action = 'idle';
+        p2Fighter.actionTick = 0;
+        zone.p2DownTicks = 0;
+        addFloatingScore(zone, p2Fighter.x, GROUND_Y - 56, ct.coopRevivePopup, '#4ade80');
+        pushParticles(zone.particles, p2Fighter.x, GROUND_Y - 24, '#4ade80', 12, 3.0);
+        audio?.onClash?.(true);
+      }
+    } else {
+      zone.p2DownTicks = 0;
+    }
+  }
+
+  // Shared Camera Anchor (keeps both living heroes framed cleanly inside 320x240)
+  const camFocusX =
+    p1Alive && p2Alive && p2Fighter
+      ? Math.round((zone.p1.x + p2Fighter.x) * 0.5)
+      : p1Alive
+      ? zone.p1.x
+      : p2Alive && p2Fighter
+      ? p2Fighter.x
+      : zone.p1.x;
+
+  const rearHeroLimit =
+    p1Alive && p2Alive && p2Fighter
+      ? Math.max(0, Math.min(zone.p1.x, p2Fighter.x) - 28)
+      : ZONE_WORLD_WIDTH - NATIVE_WIDTH;
+
   const targetCamX = Math.max(
     0,
-    Math.min(ZONE_WORLD_WIDTH - NATIVE_WIDTH, Math.min(zone.lockX - NATIVE_WIDTH, zone.p1.x - 112))
+    Math.min(
+      ZONE_WORLD_WIDTH - NATIVE_WIDTH,
+      rearHeroLimit,
+      Math.min(zone.lockX + 38 - NATIVE_WIDTH, camFocusX - 112)
+    )
   );
   if (targetCamX > zone.cameraX) {
-    zone.cameraX = Math.min(targetCamX, zone.cameraX + 2.8);
+    zone.cameraX = Math.min(targetCamX, zone.cameraX + 2.9);
   }
 
-  // Step Minion AI (Double Dragon etiquette: only the closest minion attacks while the 2nd circles!)
-  let attackerAssigned = false;
-  const sortedByProximity = [...activeLiving].sort(
-    (a, b) => Math.abs(a.fighter.x - zone.p1.x) - Math.abs(b.fighter.x - zone.p1.x)
-  );
+  const zSweepTrk = zoneSweepMap.get(zone) ?? { streak: 0, lastSweepTick: -999 };
+  const zSweepStreak =
+    zone.tick - zSweepTrk.lastSweepTick < 160 ? zSweepTrk.streak : 0;
+
+  const livingHeroes: FighterState[] = [];
+  if (zone.p1.hp > 0 && zone.p1.action !== 'dead') livingHeroes.push(zone.p1);
+  if (p2Fighter && p2Fighter.hp > 0 && p2Fighter.action !== 'dead') {
+    livingHeroes.push(p2Fighter);
+  }
+
+  const nearestHeroTo = (mx: number): FighterState => {
+    if (livingHeroes.length === 0) return zone.p1;
+    let chosen = livingHeroes[0];
+    let best = Math.abs(chosen.x - mx);
+    for (let i = 1; i < livingHeroes.length; i++) {
+      const d = Math.abs(livingHeroes[i].x - mx);
+      if (d < best) {
+        best = d;
+        chosen = livingHeroes[i];
+      }
+    }
+    return chosen;
+  };
+
+  let attackersCount = 0;
+  const maxActiveAttackers = zone.isCoop ? 2 : 1;
+  const sortedByProximity = [...activeLiving].sort((a, b) => {
+    const da = Math.abs(a.fighter.x - nearestHeroTo(a.fighter.x).x);
+    const db = Math.abs(b.fighter.x - nearestHeroTo(b.fighter.x).x);
+    return da - db;
+  });
 
   for (const inst of sortedByProximity) {
     const m = inst.fighter;
     if (inst.attackCooldown > 0) inst.attackCooldown = Math.max(0, inst.attackCooldown - 1);
 
+    const targetHero = nearestHeroTo(m.x);
     const aiInput: InputState = { ...EMPTY_INPUT };
-    if (!zone.playerDefeated && canInterruptAction(m.action)) {
-      m.facing = zone.p1.x >= m.x ? 1 : -1;
-      const dist = Math.abs(zone.p1.x - m.x);
+    if (!zone.playerDefeated && livingHeroes.length > 0 && canInterruptAction(m.action)) {
+      m.facing = targetHero.x >= m.x ? 1 : -1;
+      const dist = Math.abs(targetHero.x - m.x);
       const towardKey = m.facing === 1 ? 'right' : 'left';
       const awayKey = m.facing === 1 ? 'left' : 'right';
 
-      if (!attackerAssigned) {
-        attackerAssigned = true;
+      const agileMinion =
+        m.skin === 'pit_thrall' ||
+        m.skin === 'drax_acolyte' ||
+        m.skin === 'monolith_spearman' ||
+        m.skin === 'crypt_skeleton' ||
+        m.skin === 'goblin_scout' ||
+        m.skin === 'dire_wolf' ||
+        m.skin === 'undead_warrior' ||
+        m.skin === 'imperial_halberdier' ||
+        m.skin === 'abyssal_demon' ||
+        m.skin === 'spectral_wraith' ||
+        Boolean(inst.isBossFinale);
+
+      if (
+        targetHero.action === 'sweep_low' &&
+        targetHero.actionTick <= 11 &&
+        dist < 76 &&
+        m.y >= GROUND_Y &&
+        m.skin !== 'cave_bat' &&
+        ((agileMinion && zSweepStreak >= 2) || zSweepStreak >= 3)
+      ) {
+        aiInput.up = true;
+        if (dist > 30) aiInput[towardKey] = true;
+      } else if (
+        targetHero.action === 'sweep_low' &&
+        targetHero.actionTick >= 13 &&
+        dist < 56 &&
+        m.y >= GROUND_Y &&
+        zSweepStreak >= 2
+      ) {
+        aiInput.btnA = true;
+        inst.attackCooldown = 34;
+      } else if (attackersCount < maxActiveAttackers) {
+        attackersCount += 1;
         if (dist > 48) {
           aiInput[towardKey] = true;
           m.action = 'walk_fwd';
           m.vx = m.facing * inst.moveSpeed;
         } else if (inst.attackCooldown <= 0) {
           const r = (zone.tick * 19 + inst.uid * 31) % 100;
-          if (r < 22 && inst.aggression > 0.26) {
+          if (inst.isBossFinale && r < 22) {
+            aiInput.btnC = true;
+          } else if (r < 26 && inst.aggression > 0.26) {
             aiInput.btnL1 = true;
           } else {
             aiInput.btnA = true;
           }
-          inst.attackCooldown = Math.max(36, Math.round(68 - inst.aggression * 60));
+          inst.attackCooldown = Math.max(30, Math.round(66 - inst.aggression * 56));
         } else if (dist < 28) {
           aiInput[awayKey] = true;
         }
       } else {
-        // Flanking minion waits patiently at ~82px distance!
         if (dist > 92) {
           aiInput[towardKey] = true;
         } else if (dist < 68) {
@@ -1744,7 +2289,7 @@ export function stepZoneTraversal(
         }
       }
 
-      applyFighterInput(m, zone.p1, aiInput, audio, false);
+      applyFighterInput(m, targetHero, aiInput, audio, false);
       if (m.action === 'walk_fwd') {
         m.vx = m.facing * inst.moveSpeed;
       }
@@ -1753,292 +2298,343 @@ export function stepZoneTraversal(
     stepFighterPhysicsBounds(m, Math.max(16, zone.cameraX - 24), ZONE_WORLD_WIDTH + 48, 0.35);
   }
 
-  // Resolve Krom's sword attacks against ALL living minions in sword reach!
-  if (isAttackAction(zone.p1.action) && !zone.playerDefeated) {
-    const spec = ATTACK_SPECS[zone.p1.action];
-    if (zone.p1.actionTick >= spec.activeStart && zone.p1.actionTick <= spec.activeEnd) {
-      for (const inst of activeLiving) {
-        if (zone.alreadyHitUids.includes(inst.uid)) continue;
-        const def = inst.fighter;
-        const whirlwindZone =
-          p1Technique === 'whirlwind_edge' && zone.p1.action === 'spin_decap';
-        const skyBreakerZone =
-          p1Technique === 'sky_breaker' && zone.p1.action === 'cleave_overhead';
-
-        // Spin decap hits in BOTH directions around Krom (360° blade arc!)
-        const dx =
-          zone.p1.action === 'spin_decap'
-            ? Math.abs(def.x - zone.p1.x)
-            : (def.x - zone.p1.x) * zone.p1.facing;
-        const minDx = zone.p1.action === 'spin_decap' ? 0 : -12;
-        if (dx < minDx || dx > spec.range + (whirlwindZone ? 14 : 6)) continue;
-
-        zone.alreadyHitUids.push(inst.uid);
-        const strikeDir: 1 | -1 = def.x >= zone.p1.x ? 1 : -1;
-        const woundX = def.x - strikeDir * 5;
-        const clashX = (zone.p1.x + def.x) * 0.5;
-        const hitY =
-          spec.heightZone === 'low'
-            ? GROUND_Y - 13
-            : spec.heightZone === 'mid'
-            ? GROUND_Y - 30
-            : spec.heightZone === 'neck'
-            ? GROUND_Y - 46
-            : GROUND_Y - 36;
-
-        if (
-          def.action === 'block_high' &&
-          spec.heightZone !== 'low' &&
-          zone.p1.action !== 'cleave_overhead'
-        ) {
-          def.action = 'parried_stun';
-          def.actionTick = 0;
-          def.actionDuration = 14;
-          def.vx = strikeDir * 4.5;
-          emitWeaponImpact(
-            zone.impacts,
-            zone.particles,
-            zone.floorDecals,
-            clashX,
-            hitY,
-            strikeDir,
-            'parry_clash',
-            goreMode,
-            zone.tick
-          );
-          audio?.onClash?.(false);
-          continue;
-        }
-
-        const techMult = skyBreakerZone ? 1.25 : whirlwindZone ? 1.15 : 1;
-        const rawDamage = Math.round(spec.damage * zone.p1.damageMultiplier * techMult);
-        const lethalSpin =
-          zone.p1.action === 'spin_decap' &&
-          (def.hp - rawDamage <= 0 ||
-            def.hp / def.maxHp <= 0.68 + zone.p1.decapThresholdBonus + (whirlwindZone ? 0.12 : 0) ||
-            zone.p1.rage >= 75);
-
-        zone.comboCount += 1;
-        zone.comboTimer = 135;
-        const comboMult = Math.min(3, 1 + Math.floor((zone.comboCount - 1) / 3) * 0.5);
-
-        if (lethalSpin) {
-          def.hp = 0;
-          def.action = goreMode === 'soft' ? 'dead' : 'decapitated';
-          def.actionTick = 0;
-          def.actionDuration = 999;
-          def.vx = 0;
-          zone.p1.rage = Math.min(100, zone.p1.rage + 14);
-          if (goreMode !== 'soft') {
-            zone.decapCount += 1;
-          }
-          zone.slainCount += 1;
-
-          const pts = Math.round((inst.scoreValue + (whirlwindZone ? 350 : 300)) * comboMult);
-          zone.score += pts;
-          zone.freezeFrames = 6;
-          zone.screenShake = goreMode === 'gore' ? 9 : 7;
-          addFloatingScore(
-            zone,
-            def.x,
-            GROUND_Y - 58,
-            whirlwindZone ? `MOULINET +${pts}` : `FATAL +${pts}`,
-            '#fef08a'
-          );
-          emitWeaponImpact(
-            zone.impacts,
-            zone.particles,
-            zone.floorDecals,
-            def.x,
-            GROUND_Y - 44,
-            strikeDir,
-            'decap_fountain',
-            goreMode,
-            zone.tick
-          );
-          audio?.onDecapitate?.();
-        } else {
-          def.hp = Math.max(0, def.hp - rawDamage);
-          zone.p1.rage = Math.min(100, zone.p1.rage + 12);
-          def.vx = strikeDir * (spec.knockback * 0.65);
-          zone.freezeFrames = skyBreakerZone ? 4 : 2;
-          zone.screenShake = skyBreakerZone ? 5 : 3;
-          const zoneImpactKind: ImpactEffectKind =
-            zone.p1.action === 'thrust_mid'
-              ? 'pierce_thrust'
-              : zone.p1.action === 'cleave_overhead' || zone.p1.action === 'spin_decap'
-              ? 'heavy_cleave'
-              : 'slash_wound';
-          emitWeaponImpact(
-            zone.impacts,
-            zone.particles,
-            zone.floorDecals,
-            woundX,
-            hitY,
-            strikeDir,
-            zoneImpactKind,
-            goreMode,
-            zone.tick
-          );
-          audio?.onHit?.(rawDamage >= 20);
-
-          if (def.hp <= 0) {
-            def.action = 'dead';
-            def.actionTick = 0;
-            def.actionDuration = 999;
-            zone.slainCount += 1;
-            const pts = Math.round(inst.scoreValue * comboMult);
-            zone.score += pts;
-            addFloatingScore(
-              zone,
-              def.x,
-              GROUND_Y - 52,
-              skyBreakerZone ? `BRISE-GARDE +${pts}` : `+${pts}`,
-              '#fbbf24'
-            );
-            audio?.onKnockdown?.();
-          } else {
-            def.action = spec.causesKnockdown || skyBreakerZone ? 'knockdown' : 'hit_stun';
-            def.actionTick = 0;
-            def.actionDuration = spec.causesKnockdown || skyBreakerZone ? 22 : 15;
-            zone.score += 25;
-          }
-        }
-
-        // Spawn pickup if this slain minion carried supplies or steel shards!
-        if (def.hp <= 0 && inst.dropKind) {
-          zone.pickups.push({
-            id: zone.tick * 13 + inst.uid,
-            kind: inst.dropKind,
-            x: Math.max(36, Math.min(ZONE_WORLD_WIDTH - 36, def.x)),
-            y: GROUND_Y - 18,
-            vy: -3.6,
-            collected: false,
-            tick: 0,
-          });
-        }
-      }
+  const resolveHeroZoneAttacks = (
+    hero: FighterState,
+    alreadyHitList: number[],
+    heroTechnique: TechniqueId
+  ) => {
+    if (hero.hp <= 0 || hero.action === 'dead' || !isAttackAction(hero.action) || zone.playerDefeated) {
+      return;
     }
-  }
+    const spec = ATTACK_SPECS[hero.action];
+    if (hero.actionTick < spec.activeStart || hero.actionTick > spec.activeEnd) return;
 
-  // Resolve Minion attacks against Krom (low, fair damage!)
-  for (const inst of activeLiving) {
-    const m = inst.fighter;
-    if (!isAttackAction(m.action) || m.hitApplied || zone.playerDefeated) continue;
-    const spec = ATTACK_SPECS[m.action];
-    if (m.actionTick < spec.activeStart || m.actionTick > spec.activeEnd) continue;
+    for (const inst of activeLiving) {
+      if (alreadyHitList.includes(inst.uid)) continue;
+      const def = inst.fighter;
+      if (def.hp <= 0 || def.action === 'dead' || def.action === 'decapitated') continue;
 
-    const dx = (zone.p1.x - m.x) * m.facing;
-    if (dx < -6 || dx > spec.range - 6) continue;
-    if (zone.p1.action === 'roll_fwd' || zone.p1.action === 'roll_back') continue;
-    if (zone.p1.action === 'crouch' && spec.heightZone === 'high') continue;
-    if (zone.p1.y < GROUND_Y - 14 && spec.heightZone === 'low') continue;
+      if (
+        (def.y < GROUND_Y - 14 || (def.skin === 'cave_bat' && def.action !== 'knockdown')) &&
+        spec.heightZone === 'low'
+      ) {
+        continue;
+      }
 
-    m.hitApplied = true;
-    const clashX = (m.x + zone.p1.x) * 0.5;
+      const whirlwindZone =
+        heroTechnique === 'whirlwind_edge' && hero.action === 'spin_decap';
+      const skyBreakerZone =
+        heroTechnique === 'sky_breaker' && hero.action === 'cleave_overhead';
 
-    if (zone.p1.action === 'block_high' && spec.heightZone !== 'low') {
-      const isRiposte = p1Technique === 'iron_riposte' && zone.p1.actionTick <= 14;
-      const perfect = isRiposte || zone.p1.actionTick <= 8;
-      if (perfect) {
-        m.action = 'parried_stun';
-        m.actionTick = 0;
-        m.actionDuration = isRiposte ? 30 : 24;
-        m.vx = -m.facing * (isRiposte ? 5.8 : 4.5);
-        zone.p1.stamina = Math.min(zone.p1.maxStamina, zone.p1.stamina + (isRiposte ? 28 : 20));
-        zone.p1.rage = Math.min(100, zone.p1.rage + (isRiposte ? 20 : 15));
+      const dx =
+        hero.action === 'spin_decap'
+          ? Math.abs(def.x - hero.x)
+          : (def.x - hero.x) * hero.facing;
+      const minDx = hero.action === 'spin_decap' ? 0 : -12;
+      if (dx < minDx || dx > spec.range + (whirlwindZone ? 14 : 6)) continue;
 
+      alreadyHitList.push(inst.uid);
+      const strikeDir: 1 | -1 = def.x >= hero.x ? 1 : -1;
+      const woundX = def.x - strikeDir * 5;
+      const clashX = (hero.x + def.x) * 0.5;
+      const hitY =
+        spec.heightZone === 'low'
+          ? GROUND_Y - 13
+          : spec.heightZone === 'mid'
+          ? GROUND_Y - 30
+          : spec.heightZone === 'neck'
+          ? GROUND_Y - 46
+          : GROUND_Y - 36;
+
+      if (
+        def.action === 'block_high' &&
+        spec.heightZone !== 'low' &&
+        hero.action !== 'cleave_overhead'
+      ) {
+        def.action = 'parried_stun';
+        def.actionTick = 0;
+        def.actionDuration = 14;
+        def.vx = strikeDir * 4.5;
         emitWeaponImpact(
           zone.impacts,
           zone.particles,
           zone.floorDecals,
           clashX,
-          GROUND_Y - 36,
-          zone.p1.facing,
-          'parry_clash',
-          goreMode,
-          zone.tick
-        );
-
-        if (isRiposte) {
-          m.hp = Math.max(0, m.hp - 14);
-          zone.score += 140;
-          addFloatingScore(zone, zone.p1.x, GROUND_Y - 56, 'RIPOSTE -14 PV', '#38bdf8');
-          emitWeaponImpact(
-            zone.impacts,
-            zone.particles,
-            zone.floorDecals,
-            m.x - zone.p1.facing * 5,
-            GROUND_Y - 34,
-            zone.p1.facing,
-            'slash_wound',
-            goreMode,
-            zone.tick + 1
-          );
-          if (m.hp <= 0) {
-            m.action = 'dead';
-            m.actionTick = 0;
-            m.actionDuration = 999;
-            zone.slainCount += 1;
-            zone.score += inst.scoreValue;
-            addFloatingScore(zone, m.x, GROUND_Y - 46, `+${inst.scoreValue}`, '#fbbf24');
-          }
-        } else {
-          zone.score += 80;
-          addFloatingScore(zone, zone.p1.x, GROUND_Y - 56, 'PARADE +80', '#38bdf8');
-        }
-        audio?.onClash?.(true);
-      } else {
-        zone.p1.hp = Math.max(1, zone.p1.hp - 2);
-        emitWeaponImpact(
-          zone.impacts,
-          zone.particles,
-          zone.floorDecals,
-          clashX,
-          GROUND_Y - 36,
-          m.facing,
+          hitY,
+          strikeDir,
           'parry_clash',
           goreMode,
           zone.tick
         );
         audio?.onClash?.(false);
+        continue;
       }
+
+      const techMult = skyBreakerZone ? 1.25 : whirlwindZone ? 1.15 : 1;
+      const rawDamage = Math.round(spec.damage * hero.damageMultiplier * techMult);
+      const bossProtected =
+        Boolean(inst.isBossFinale) &&
+        def.hp - rawDamage > 0 &&
+        def.hp / def.maxHp > 0.28;
+
+      const lethalSpin =
+        !bossProtected &&
+        hero.action === 'spin_decap' &&
+        (def.hp - rawDamage <= 0 ||
+          def.hp / def.maxHp <=
+            0.68 + hero.decapThresholdBonus + (whirlwindZone ? 0.12 : 0) ||
+          hero.rage >= 75);
+
+      zone.comboCount += 1;
+      zone.comboTimer = 135;
+      const comboMult = Math.min(3, 1 + Math.floor((zone.comboCount - 1) / 3) * 0.5);
+
+      if (lethalSpin) {
+        def.hp = 0;
+        def.action = goreMode === 'soft' ? 'dead' : 'decapitated';
+        def.actionTick = 0;
+        def.actionDuration = 999;
+        def.vx = 0;
+        hero.rage = Math.min(100, hero.rage + 14);
+        if (goreMode !== 'soft') {
+          zone.decapCount += 1;
+        }
+        zone.slainCount += 1;
+
+        const pts = Math.round((inst.scoreValue + (whirlwindZone ? 350 : 300)) * comboMult);
+        zone.score += pts;
+        zone.freezeFrames = 6;
+        zone.screenShake = goreMode === 'gore' ? 9 : 7;
+        addFloatingScore(
+          zone,
+          def.x,
+          GROUND_Y - 58,
+          whirlwindZone ? ct.whirlwindPopup(pts) : ct.fatalPopup(pts),
+          '#fef08a'
+        );
+        emitWeaponImpact(
+          zone.impacts,
+          zone.particles,
+          zone.floorDecals,
+          def.x,
+          GROUND_Y - 44,
+          strikeDir,
+          'decap_fountain',
+          goreMode,
+          zone.tick
+        );
+        audio?.onDecapitate?.();
+      } else {
+        def.hp = Math.max(0, def.hp - rawDamage);
+        hero.rage = Math.min(100, hero.rage + 12);
+        def.vx = strikeDir * (spec.knockback * 0.65);
+        zone.freezeFrames = skyBreakerZone ? 4 : 2;
+        zone.screenShake = skyBreakerZone ? 5 : 3;
+        const zoneImpactKind: ImpactEffectKind =
+          hero.action === 'thrust_mid'
+            ? 'pierce_thrust'
+            : hero.action === 'cleave_overhead' || hero.action === 'spin_decap'
+            ? 'heavy_cleave'
+            : 'slash_wound';
+        emitWeaponImpact(
+          zone.impacts,
+          zone.particles,
+          zone.floorDecals,
+          woundX,
+          hitY,
+          strikeDir,
+          zoneImpactKind,
+          goreMode,
+          zone.tick
+        );
+        audio?.onHit?.(rawDamage >= 20);
+
+        if (def.hp <= 0) {
+          def.action = 'dead';
+          def.actionTick = 0;
+          def.actionDuration = 999;
+          zone.slainCount += 1;
+          const pts = Math.round(inst.scoreValue * comboMult);
+          zone.score += pts;
+          addFloatingScore(
+            zone,
+            def.x,
+            GROUND_Y - 52,
+            skyBreakerZone ? ct.guardBreakPopup(pts) : `+${pts}`,
+            '#fbbf24'
+          );
+          audio?.onKnockdown?.();
+        } else {
+          def.action = spec.causesKnockdown || skyBreakerZone ? 'knockdown' : 'hit_stun';
+          def.actionTick = 0;
+          def.actionDuration = spec.causesKnockdown || skyBreakerZone ? 22 : 15;
+          zone.score += 25;
+        }
+      }
+
+      if (def.hp <= 0 && inst.dropKind) {
+        zone.pickups.push({
+          id: zone.tick * 13 + inst.uid,
+          kind: inst.dropKind,
+          x: Math.max(36, Math.min(ZONE_WORLD_WIDTH - 36, def.x)),
+          y: GROUND_Y - 18,
+          vy: -3.6,
+          collected: false,
+          tick: 0,
+        });
+      }
+    }
+  };
+
+  resolveHeroZoneAttacks(zone.p1, zone.alreadyHitUids, p1Technique);
+  if (p2Fighter) {
+    if (!zone.alreadyHitUidsP2) zone.alreadyHitUidsP2 = [];
+    resolveHeroZoneAttacks(p2Fighter, zone.alreadyHitUidsP2, p2Technique);
+  }
+
+  for (const inst of activeLiving) {
+    const m = inst.fighter;
+    if (
+      m.hp <= 0 ||
+      m.action === 'dead' ||
+      m.action === 'decapitated' ||
+      !isAttackAction(m.action) ||
+      m.hitApplied ||
+      zone.playerDefeated
+    ) {
       continue;
     }
+    const spec = ATTACK_SPECS[m.action];
+    if (m.actionTick < spec.activeStart || m.actionTick > spec.activeEnd) continue;
 
-    const dmg = Math.max(4, Math.round(spec.damage * m.damageMultiplier));
-    zone.p1.hp = Math.max(0, zone.p1.hp - dmg);
-    zone.p1.rage = Math.min(100, zone.p1.rage + 12);
-    zone.comboCount = 0;
-    zone.screenShake = 3;
-    emitWeaponImpact(
-      zone.impacts,
-      zone.particles,
-      zone.floorDecals,
-      zone.p1.x - m.facing * 5,
-      GROUND_Y - 34,
-      m.facing,
-      'slash_wound',
-      goreMode,
-      zone.tick
-    );
-    audio?.onHit?.(false);
+    for (const hero of livingHeroes) {
+      if (hero.hp <= 0 || hero.action === 'dead') continue;
+      const heroTechnique = hero.id === 'p2' ? p2Technique : p1Technique;
+      const dx = (hero.x - m.x) * m.facing;
+      if (dx < -6 || dx > spec.range - 6) continue;
+      if (hero.action === 'roll_fwd' || hero.action === 'roll_back') continue;
+      if (hero.action === 'crouch' && spec.heightZone === 'high') continue;
+      if (hero.y < GROUND_Y - 14 && spec.heightZone === 'low') continue;
 
-    if (zone.p1.hp <= 0) {
-      zone.p1.action = 'dead';
-      zone.p1.actionTick = 0;
-      zone.p1.actionDuration = 999;
-      zone.playerDefeated = true;
-      audio?.onRoundEnd?.(false);
-    } else {
-      zone.p1.action = 'hit_stun';
-      zone.p1.actionTick = 0;
-      zone.p1.actionDuration = 10;
+      m.hitApplied = true;
+      const clashX = (m.x + hero.x) * 0.5;
+
+      if (hero.action === 'block_high' && spec.heightZone !== 'low') {
+        const isRiposte = heroTechnique === 'iron_riposte' && hero.actionTick <= 14;
+        const perfect = isRiposte || hero.actionTick <= 8;
+        if (perfect) {
+          m.action = 'parried_stun';
+          m.actionTick = 0;
+          m.actionDuration = isRiposte ? 30 : 24;
+          m.vx = -m.facing * (isRiposte ? 5.8 : 4.5);
+          hero.stamina = Math.min(hero.maxStamina, hero.stamina + (isRiposte ? 28 : 20));
+          hero.rage = Math.min(100, hero.rage + (isRiposte ? 20 : 15));
+
+          emitWeaponImpact(
+            zone.impacts,
+            zone.particles,
+            zone.floorDecals,
+            clashX,
+            GROUND_Y - 36,
+            hero.facing,
+            'parry_clash',
+            goreMode,
+            zone.tick
+          );
+
+          if (isRiposte) {
+            m.hp = Math.max(0, m.hp - 14);
+            zone.score += 140;
+            addFloatingScore(zone, hero.x, GROUND_Y - 56, ct.ripostePopup, '#38bdf8');
+            emitWeaponImpact(
+              zone.impacts,
+              zone.particles,
+              zone.floorDecals,
+              m.x - hero.facing * 5,
+              GROUND_Y - 34,
+              hero.facing,
+              'slash_wound',
+              goreMode,
+              zone.tick + 1
+            );
+            if (m.hp <= 0) {
+              m.action = 'dead';
+              m.actionTick = 0;
+              m.actionDuration = 999;
+              zone.slainCount += 1;
+              zone.score += inst.scoreValue;
+              addFloatingScore(zone, m.x, GROUND_Y - 46, `+${inst.scoreValue}`, '#fbbf24');
+            }
+          } else {
+            zone.score += 80;
+            addFloatingScore(zone, hero.x, GROUND_Y - 56, ct.parryPopup, '#38bdf8');
+          }
+          audio?.onClash?.(true);
+        } else {
+          hero.hp = Math.max(1, hero.hp - 2);
+          emitWeaponImpact(
+            zone.impacts,
+            zone.particles,
+            zone.floorDecals,
+            clashX,
+            GROUND_Y - 36,
+            m.facing,
+            'parry_clash',
+            goreMode,
+            zone.tick
+          );
+          audio?.onClash?.(false);
+        }
+        break;
+      }
+
+      const dmg = Math.max(4, Math.round(spec.damage * m.damageMultiplier));
+      hero.hp = Math.max(0, hero.hp - dmg);
+      hero.rage = Math.min(100, hero.rage + 12);
+      zone.comboCount = 0;
+      zone.screenShake = 3;
+      emitWeaponImpact(
+        zone.impacts,
+        zone.particles,
+        zone.floorDecals,
+        hero.x - m.facing * 5,
+        GROUND_Y - 34,
+        m.facing,
+        'slash_wound',
+        goreMode,
+        zone.tick
+      );
+      audio?.onHit?.(false);
+
+      if (hero.hp <= 0) {
+        hero.action = 'dead';
+        hero.actionTick = 0;
+        hero.actionDuration = 999;
+        if (zone.isCoop && p2Fighter) {
+          const bothDown = zone.p1.hp <= 0 && p2Fighter.hp <= 0;
+          if (bothDown) {
+            zone.playerDefeated = true;
+            audio?.onRoundEnd?.(false);
+          } else {
+            zone.bannerText = `${hero.name} · ${ct.coopAllyDownBanner}`;
+            zone.bannerTimer = 85;
+            audio?.onKnockdown?.();
+          }
+        } else {
+          zone.playerDefeated = true;
+          audio?.onRoundEnd?.(false);
+        }
+      } else {
+        hero.action = 'hit_stun';
+        hero.actionTick = 0;
+        hero.actionDuration = 10;
+      }
+      break;
     }
   }
 
-  // Step fallen corpses & trigger "AVANCEZ >>" prompt when wave clears
   let anyJustCleared = false;
+  let clearedGateX = 0;
   for (let i = zone.enemies.length - 1; i >= 0; i--) {
     const inst = zone.enemies[i];
     if (inst.fighter.action === 'dead' || inst.fighter.action === 'decapitated') {
@@ -2046,6 +2642,7 @@ export function stepZoneTraversal(
       inst.despawnTimer += 1;
       if (inst.despawnTimer === 12) {
         anyJustCleared = true;
+        clearedGateX = inst.gateX;
       }
       if (inst.despawnTimer > 95) {
         zone.enemies.splice(i, 1);
@@ -2056,15 +2653,34 @@ export function stepZoneTraversal(
   const remainingAlive = zone.enemies.some(
     (e) => e.fighter.action !== 'dead' && e.fighter.action !== 'decapitated'
   );
-  if (anyJustCleared && !remainingAlive) {
-    zone.goArrowTimer = 140;
+  const moreInSameGate = zone.pendingWaves.some((w) => w.gateX === clearedGateX);
+
+  if (anyJustCleared && !remainingAlive && !moreInSameGate) {
+    zone.goArrowTimer = 150;
     if (zone.pendingWaves.length === 0) {
       zone.bannerText = clearBannerText;
       zone.bannerTimer = 110;
+    } else {
+      zone.bannerText = ct.wallBreachedBanner;
+      zone.bannerTimer = 75;
+    }
+
+    // Auto-second-wind when a pocket is cleared in Co-op!
+    if (zone.isCoop && p2Fighter && !zone.playerDefeated) {
+      if (zone.p1.hp <= 0 && p2Fighter.hp > 0) {
+        zone.p1.hp = Math.round(zone.p1.maxHp * 0.35);
+        zone.p1.action = 'idle';
+        zone.p1.actionTick = 0;
+        addFloatingScore(zone, zone.p1.x, GROUND_Y - 56, ct.coopRevivePopup, '#4ade80');
+      } else if (p2Fighter.hp <= 0 && zone.p1.hp > 0) {
+        p2Fighter.hp = Math.round(p2Fighter.maxHp * 0.35);
+        p2Fighter.action = 'idle';
+        p2Fighter.actionTick = 0;
+        addFloatingScore(zone, p2Fighter.x, GROUND_Y - 56, ct.coopRevivePopup, '#4ade80');
+      }
     }
   }
 
-  // Step Pickups (Roast Meat +32 PV & Steel Shards +5 Shards/+120 PTS)
   for (const pk of zone.pickups) {
     if (pk.collected) continue;
     pk.tick += 1;
@@ -2076,24 +2692,36 @@ export function stepZoneTraversal(
       pk.vy = 0;
     }
 
-    if (Math.abs(zone.p1.x - pk.x) < 22 && !zone.playerDefeated) {
+    let collector: FighterState | null = null;
+    if (zone.p1.hp > 0 && Math.abs(zone.p1.x - pk.x) < 22) {
+      collector = zone.p1;
+    } else if (p2Fighter && p2Fighter.hp > 0 && Math.abs(p2Fighter.x - pk.x) < 22) {
+      collector = p2Fighter;
+    }
+
+    if (collector && !zone.playerDefeated) {
       pk.collected = true;
       if (pk.kind === 'meat_heal') {
         const heal = 32;
-        zone.p1.hp = Math.min(zone.p1.maxHp, zone.p1.hp + heal);
+        collector.hp = Math.min(collector.maxHp, collector.hp + heal);
+        if (zone.isCoop && p2Fighter) {
+          const partner = collector.id === 'p1' ? p2Fighter : zone.p1;
+          if (partner.hp > 0) {
+            partner.hp = Math.min(partner.maxHp, partner.hp + 18);
+          }
+        }
         zone.score += 100;
-        addFloatingScore(zone, pk.x, GROUND_Y - 46, `+${heal} PV`, '#4ade80');
+        addFloatingScore(zone, pk.x, GROUND_Y - 46, ct.healPopup(heal), '#4ade80');
       } else {
         zone.shardsCollected += 6;
         zone.score += 150;
-        addFloatingScore(zone, pk.x, GROUND_Y - 46, '+6 ÉCLATS', '#38bdf8');
+        addFloatingScore(zone, pk.x, GROUND_Y - 46, ct.shardsPopup(6), '#38bdf8');
       }
       pushParticles(zone.particles, pk.x, GROUND_Y - 12, '#fde047', 10, 3.0);
       audio?.onClash?.(true);
     }
   }
 
-  // Floating score popups, localized impact effects & floor decals
   for (let i = zone.floatingTexts.length - 1; i >= 0; i--) {
     const ft = zone.floatingTexts[i];
     ft.y -= 0.45;
@@ -2106,21 +2734,35 @@ export function stepZoneTraversal(
     zone.particles,
     zone.floorDecals,
     goreMode,
-    80
+    96
   );
 
-  // Check Boss Gate arrival at far right of the 960px zone!
+  const finalCheckX =
+    zone.isCoop && p2Fighter
+      ? Math.max(
+          zone.p1.hp > 0 ? zone.p1.x : 0,
+          p2Fighter.hp > 0 ? p2Fighter.x : 0
+        )
+      : zone.p1.x;
+
+  // Check exit gate arrival at far right of the 1800px zone!
   if (
     !remainingAlive &&
     zone.pendingWaves.length === 0 &&
-    zone.p1.x >= ZONE_WORLD_WIDTH - 48 &&
+    finalCheckX >= ZONE_WORLD_WIDTH - 52 &&
     !zone.zoneCompleted
   ) {
     zone.zoneCompleted = true;
-    zone.score += 500;
-    // Warrior's Second Wind before entering the Boss Arena (+35% HP restored!)
+    zone.score += zone.isCoop ? 900 : 500;
     zone.p1.hp = Math.min(zone.p1.maxHp, zone.p1.hp + Math.round(zone.p1.maxHp * 0.35));
     zone.p1.stamina = zone.p1.maxStamina;
+    if (p2Fighter && p2Fighter.hp > 0) {
+      p2Fighter.hp = Math.min(
+        p2Fighter.maxHp,
+        p2Fighter.hp + Math.round(p2Fighter.maxHp * 0.35)
+      );
+      p2Fighter.stamina = p2Fighter.maxStamina;
+    }
     audio?.onRoundEnd?.(true);
   }
 }

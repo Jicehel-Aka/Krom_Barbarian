@@ -11,15 +11,21 @@ export type CutsceneId =
   | 'boss3_intro'
   | 'act4_opening'
   | 'boss4_intro'
+  | 'act5_opening'
+  | 'boss5_intro'
+  | 'act6_opening'
+  | 'boss6_intro'
   | 'campaign_ending';
 
-export type StageId = 'forest' | 'crypt' | 'arena' | 'sanctuary';
+export type StageId = 'forest' | 'caverns' | 'crypt' | 'arena' | 'inferno' | 'sanctuary';
 
 export type GameMode =
   | 'campaign'
   | 'quick_ai'
   | 'local_2p'
+  | 'coop_local'
   | 'wifi_multi'
+  | 'coop_wifi'
   | 'usb_serial';
 
 export type ScreenFlowState =
@@ -43,14 +49,27 @@ export type MinionSkin =
   | 'cult_acolyte'
   | 'crypt_skeleton'
   | 'pit_thrall'
-  | 'drax_acolyte';
+  | 'drax_acolyte'
+  | 'goblin_scout'
+  | 'orc_marauder'
+  | 'undead_warrior'
+  | 'risen_zombie'
+  | 'dire_wolf'
+  | 'cave_bat'
+  | 'spectral_wraith'
+  | 'skeleton_mage'
+  | 'imperial_halberdier'
+  | 'stone_golem'
+  | 'abyssal_demon';
 
 export type FighterSkin =
   | 'krom'
   | 'rival_aka'
   | 'gorgar'
+  | 'thalgrim'
   | 'vorgath'
   | 'malakor'
+  | 'baelgor'
   | 'drax'
   | MinionSkin;
 
@@ -156,6 +175,7 @@ export interface Projectile {
   id: number;
   owner: 'p1' | 'p2';
   kind: 'shockwave' | 'dark_orb';
+  colorTheme?: 'lava' | 'crystal' | 'hellfire' | 'shadow';
   x: number;
   y: number;
   vx: number;
@@ -223,7 +243,7 @@ export interface MatchState {
   tick: number;
   stage: StageId;
   mode: GameMode;
-  actIndex: number; // 0..3
+  actIndex: number; // 0..5
   round: number;
   score: number;
   bannerText: string;
@@ -246,11 +266,14 @@ export interface MatchState {
 }
 
 export interface ZoneWaveEnemySpec {
-  skin: MinionSkin;
-  triggerX: number; // Camera/player X threshold that spawns this minion
-  spawnX: number; // World X position (0..960)
+  skin: FighterSkin;
+  triggerX: number; // Camera/player X threshold that spawns this enemy
+  spawnX: number; // World X position (0..1800)
   gateX: number; // Camera lock X while this wave is active
   dropKind?: 'meat_heal' | 'steel_shard';
+  fromLeft?: boolean; // Optional flanking ambush from behind!
+  isBossFinale?: boolean; // Final Co-op Warlord encounter at the end of the zone
+  bossHpOverride?: number;
 }
 
 export interface ZoneEnemyInstance {
@@ -262,6 +285,7 @@ export interface ZoneEnemyInstance {
   attackCooldown: number;
   gateX: number;
   dropKind?: 'meat_heal' | 'steel_shard';
+  isBossFinale?: boolean;
   despawnTimer: number; // Counts up once dead/decapitated, fades out cleanly
 }
 
@@ -289,12 +313,17 @@ export interface ZoneTraversalState {
   actIndex: number;
   zoneTitle: string;
   tick: number;
-  worldWidth: number; // 960px (3x Gamebuino AKA 320px screens)
-  cameraX: number; // 0..640
+  worldWidth: number; // 1800px seamless panorama
+  cameraX: number; // 0..1480
   lockX: number; // Current wave lock boundary in world coordinates
   goArrowTimer: number;
+  isCoop?: boolean;
   p1: FighterState;
+  p2?: FighterState | null;
   alreadyHitUids: number[];
+  alreadyHitUidsP2?: number[];
+  p1DownTicks?: number;
+  p2DownTicks?: number;
   enemies: ZoneEnemyInstance[];
   pendingWaves: ZoneWaveEnemySpec[];
   pickups: ZonePickup[];
@@ -321,7 +350,7 @@ export interface ZoneTraversalState {
 export type TechniqueId = 'whirlwind_edge' | 'iron_riposte' | 'sky_breaker';
 
 export interface ProgressionState {
-  currentAct: number; // 0..3 unlocked
+  currentAct: number; // 0..5 unlocked
   completedCampaign: boolean;
   steelShards: number;
   renownXp: number;
@@ -340,6 +369,7 @@ export interface ProgressionState {
 export interface MultiplayerRoomSummary {
   roomCode: string;
   stage: StageId;
+  roomMode?: 'versus' | 'coop';
   hasPc: boolean;
   hasAka: boolean;
   createdAt: number;

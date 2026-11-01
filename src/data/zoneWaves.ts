@@ -1,0 +1,116 @@
+import type { StageId, ZoneWaveEnemySpec } from '../types/game.ts';
+
+export interface StageZoneConfig {
+  actIndex: number;
+  zoneTitle: string;
+  waves: ZoneWaveEnemySpec[];
+}
+
+export const STAGE_ZONE_CONFIGS: Record<StageId, StageZoneConfig> = {
+  forest: {
+    actIndex: 0,
+    zoneTitle: 'Futaies Profondes, Ruines & Arche Runique',
+    waves: [
+      { skin: 'goblin_scout', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'dire_wolf', triggerX: 110, spawnX: 430, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'wolf_raider', triggerX: 220, spawnX: 545, gateX: 600 },
+      { skin: 'goblin_scout', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'dire_wolf', triggerX: 730, spawnX: 990, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'wolf_raider', triggerX: 830, spawnX: 1085, gateX: 1200 },
+      { skin: 'monolith_spearman', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'dire_wolf', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'goblin_scout', triggerX: 1320, spawnX: 1560, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'wolf_raider', triggerX: 1400, spawnX: 1635, gateX: 1752 },
+      { skin: 'monolith_spearman', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+  caverns: {
+    actIndex: 1,
+    zoneTitle: 'Escalier Moussu, Cascades & Galerie des Cristaux',
+    waves: [
+      { skin: 'goblin_scout', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'cave_bat', triggerX: 115, spawnX: 430, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'orc_marauder', triggerX: 220, spawnX: 545, gateX: 600 },
+      { skin: 'cave_bat', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'orc_marauder', triggerX: 730, spawnX: 990, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'monolith_spearman', triggerX: 830, spawnX: 1085, gateX: 1200 },
+      { skin: 'stone_golem', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'cave_bat', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'orc_marauder', triggerX: 1320, spawnX: 1560, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'goblin_scout', triggerX: 1400, spawnX: 1635, gateX: 1752 },
+      { skin: 'stone_golem', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+  crypt: {
+    actIndex: 2,
+    zoneTitle: 'Catacombes Sombres, Charniers & Cascades de Lave',
+    waves: [
+      { skin: 'risen_zombie', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'undead_warrior', triggerX: 110, spawnX: 410, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'cult_acolyte', triggerX: 190, spawnX: 495, gateX: 600 },
+      { skin: 'crypt_skeleton', triggerX: 260, spawnX: 555, gateX: 600 },
+      { skin: 'risen_zombie', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'undead_warrior', triggerX: 725, spawnX: 985, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'cult_acolyte', triggerX: 825, spawnX: 1080, gateX: 1200 },
+      { skin: 'crypt_skeleton', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'undead_warrior', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'risen_zombie', triggerX: 1315, spawnX: 1555, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'cult_acolyte', triggerX: 1395, spawnX: 1630, gateX: 1752 },
+      { skin: 'crypt_skeleton', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+  arena: {
+    actIndex: 3,
+    zoneTitle: 'Tour de Guet, Longs Murs de Siège & Porte du Colisée',
+    waves: [
+      { skin: 'orc_marauder', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'pit_thrall', triggerX: 110, spawnX: 410, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'imperial_halberdier', triggerX: 190, spawnX: 495, gateX: 600 },
+      { skin: 'pit_thrall', triggerX: 260, spawnX: 555, gateX: 600 },
+      { skin: 'imperial_halberdier', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'orc_marauder', triggerX: 725, spawnX: 985, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'pit_thrall', triggerX: 825, spawnX: 1080, gateX: 1200 },
+      { skin: 'stone_golem', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'pit_thrall', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'imperial_halberdier', triggerX: 1315, spawnX: 1555, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'stone_golem', triggerX: 1395, spawnX: 1630, gateX: 1752 },
+      { skin: 'imperial_halberdier', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+  inferno: {
+    actIndex: 4,
+    zoneTitle: 'Bastion de Lune, Arche des Statues & Pont de Magma',
+    waves: [
+      { skin: 'imperial_halberdier', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'skeleton_mage', triggerX: 110, spawnX: 410, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'cult_acolyte', triggerX: 190, spawnX: 495, gateX: 600 },
+      { skin: 'abyssal_demon', triggerX: 260, spawnX: 555, gateX: 600 },
+      { skin: 'skeleton_mage', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'abyssal_demon', triggerX: 725, spawnX: 985, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'imperial_halberdier', triggerX: 825, spawnX: 1080, gateX: 1200 },
+      { skin: 'abyssal_demon', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'skeleton_mage', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'abyssal_demon', triggerX: 1315, spawnX: 1555, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'imperial_halberdier', triggerX: 1395, spawnX: 1630, gateX: 1752 },
+      { skin: 'abyssal_demon', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+  sanctuary: {
+    actIndex: 5,
+    zoneTitle: 'Remparts d’Orage, Pont Noir & Nef Spectrale',
+    waves: [
+      { skin: 'spectral_wraith', triggerX: 20, spawnX: 300, gateX: 600 },
+      { skin: 'skeleton_mage', triggerX: 110, spawnX: 410, gateX: 600, dropKind: 'steel_shard' },
+      { skin: 'drax_acolyte', triggerX: 190, spawnX: 495, gateX: 600 },
+      { skin: 'spectral_wraith', triggerX: 260, spawnX: 555, gateX: 600 },
+      { skin: 'abyssal_demon', triggerX: 620, spawnX: 880, gateX: 1200 },
+      { skin: 'spectral_wraith', triggerX: 725, spawnX: 985, gateX: 1200, dropKind: 'meat_heal' },
+      { skin: 'drax_acolyte', triggerX: 825, spawnX: 1080, gateX: 1200 },
+      { skin: 'drax_acolyte', triggerX: 910, spawnX: 1155, gateX: 1200, dropKind: 'steel_shard' },
+      { skin: 'skeleton_mage', triggerX: 1230, spawnX: 1470, gateX: 1752 },
+      { skin: 'abyssal_demon', triggerX: 1315, spawnX: 1555, gateX: 1752, dropKind: 'meat_heal' },
+      { skin: 'spectral_wraith', triggerX: 1395, spawnX: 1630, gateX: 1752 },
+      { skin: 'drax_acolyte', triggerX: 1460, spawnX: 1705, gateX: 1752, dropKind: 'steel_shard' },
+    ],
+  },
+};

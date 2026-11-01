@@ -30,6 +30,13 @@ import {
 import { renderGamebuinoFrame } from './game/pixelRenderer';
 import { akaAudio } from './game/sound';
 import { SUPPORTED_LANGUAGES, TRANSLATIONS } from './i18n/translations';
+import {
+  getLocalizedAct,
+  getLocalizedCutscene,
+  getLocalizedForge,
+  getLocalizedMinion,
+  getLocalizedWebUi,
+} from './i18n/gameContentLocale';
 import { useWifiMultiplayer } from './hooks/useWifiMultiplayer';
 import { useWebSerialAKA } from './hooks/useWebSerialAKA';
 import { GamebuinoShell } from './components/GamebuinoShell';
@@ -50,6 +57,7 @@ import type {
   GameMode,
   GoreMode,
   InputState,
+  LanguageCode,
   MatchState,
   MinionSkin,
   ProgressionState,
@@ -78,6 +86,10 @@ function loadSavedProgression(): ProgressionState {
     return {
       ...DEFAULT_PROGRESSION,
       ...parsed,
+      currentAct:
+        typeof parsed.currentAct === 'number'
+          ? Math.max(0, Math.min(CAMPAIGN_ACTS.length - 1, parsed.currentAct))
+          : 0,
       highScore: typeof parsed.highScore === 'number' ? parsed.highScore : 0,
       totalMinionsSlain:
         typeof parsed.totalMinionsSlain === 'number' ? parsed.totalMinionsSlain : 0,
@@ -207,7 +219,7 @@ export default function App() {
     cursor: 0,
     sparkTick: 0,
     feedbackText: '',
-    continueLabel: 'Retour',
+    continueLabel: getLocalizedForge(settings.language).continueLabels.back,
   });
   const codexUiRef = useRef<AkaCodexUiState>({ page: 0, tick: 0 });
   const cutsceneUiRef = useRef<AkaCutsceneUiState>({
@@ -224,6 +236,7 @@ export default function App() {
   const roundAdvanceTimerRef = useRef<number>(0);
   const rewardGrantedForMatchRef = useRef<boolean>(false);
   const zoneRewardGrantedRef = useRef<boolean>(false);
+  const coopModeRef = useRef<'solo' | 'coop_local' | 'coop_wifi'>('solo');
   const prevRemoteSnapshotRef = useRef<{ p1Hp: number; p2Hp: number; decap: boolean }>({
     p1Hp: 115,
     p2Hp: 115,
@@ -285,6 +298,15 @@ export default function App() {
         kromDamageMult,
         kromDecapBonus
       );
+      if (zoneRef.current.isCoop && zoneRef.current.p2) {
+        syncFighterWithProgression(
+          zoneRef.current.p2,
+          kromMaxHp,
+          kromMaxStamina,
+          kromDamageMult,
+          kromDecapBonus
+        );
+      }
     }
   }, [kromDamageMult, kromDecapBonus, kromMaxHp, kromMaxStamina]);
 
@@ -306,6 +328,20 @@ export default function App() {
     []
   );
 
+  const computeForgeContinueLabel = useCallback(
+    (lang: LanguageCode, returnTo: ScreenFlowState, nextActAfter: number | null) => {
+      const fg = getLocalizedForge(lang);
+      if (nextActAfter !== null) return fg.continueLabels.nextAct(nextActAfter + 1);
+      if (returnTo === 'STORY_BOSS_PRELUDE' || returnTo === 'PLAYING') {
+        return fg.continueLabels.bossArena;
+      }
+      if (returnTo === 'ZONE_TRAVERSAL') return fg.continueLabels.startZone;
+      if (returnTo === 'GAME_OVER') return fg.continueLabels.rematch;
+      return fg.continueLabels.back;
+    },
+    []
+  );
+
   const openAkaForge = useCallback(
     (returnTo: ScreenFlowState, nextActAfter: number | null = null) => {
       setActiveNav('arena');
@@ -314,19 +350,14 @@ export default function App() {
       overlayReturnScreenRef.current = returnTo;
       forgeNextActAfterRef.current = nextActAfter;
       forgeUiRef.current.feedbackText = '';
-      forgeUiRef.current.continueLabel =
-        nextActAfter !== null
-          ? `Acte ${nextActAfter + 1}`
-          : returnTo === 'STORY_BOSS_PRELUDE' || returnTo === 'PLAYING'
-          ? 'Arène Boss'
-          : returnTo === 'ZONE_TRAVERSAL'
-          ? 'Lancer Zone'
-          : returnTo === 'GAME_OVER'
-          ? 'Revanche'
-          : 'Retour';
+      forgeUiRef.current.continueLabel = computeForgeContinueLabel(
+        settingsRef.current.language,
+        returnTo,
+        nextActAfter
+      );
       setScreenState('AKA_FORGE');
     },
-    []
+    [computeForgeContinueLabel]
   );
 
   const openAkaCodex = useCallback((returnTo: ScreenFlowState) => {
@@ -336,6 +367,34 @@ export default function App() {
     overlayReturnScreenRef.current = returnTo;
     setScreenState('AKA_CODEX');
   }, []);
+
+  // Dynamically refresh live labels whenever the user switches language!
+  useEffect(() => {
+    forgeUiRef.current.continueLabel = computeForgeContinueLabel(
+      settings.language,
+      overlayReturnScreenRef.current,
+      forgeNextActAfterRef.current
+    );
+    forgeUiRef.current.feedbackText = '';
+
+    if (zoneRef.current) {
+      const locAct = getLocalizedAct(zoneRef.current.actIndex, settings.language);
+      zoneRef.current.zoneTitle = locAct.zoneTitle;
+    }
+
+    const m = matchRef.current;
+    if (m.mode === 'campaign' || m.mode === 'quick_ai') {
+      if (isMinionSkin(m.p2.skin)) {
+        m.p2.name = getLocalizedMinion(m.p2.skin, settings.language).shortName;
+      } else {
+        m.p2.name = getLocalizedAct(m.actIndex, settings.language).bossName.toUpperCase();
+      }
+    }
+    if (m.bannerTimer > 0 && m.round >= 1 && !m.roundOver) {
+      const tr = TRANSLATIONS[settings.language];
+      m.bannerText = `${tr.roundBannerPrefix} ${m.round} · ${tr.fightWord}`;
+    }
+  }, [computeForgeContinueLabel, settings.language]);
 
   // Sync audio volumes & pause state when settings or menu/bootloader change
   useEffect(() => {
@@ -392,7 +451,10 @@ export default function App() {
     (actIdx: number, entryMode: CampaignEntryMode = 'full', carryScore = 0) => {
       const safeIdx = Math.max(0, Math.min(CAMPAIGN_ACTS.length - 1, actIdx));
       const act = CAMPAIGN_ACTS[safeIdx];
-      const tr = TRANSLATIONS[settingsRef.current.language];
+      const lang = settingsRef.current.language;
+      const tr = TRANSLATIONS[lang];
+      const locAct = getLocalizedAct(safeIdx, lang);
+      coopModeRef.current = 'solo';
       setActiveActIndex(safeIdx);
       setSelectedStage(act.id);
       setActiveNav('arena');
@@ -404,7 +466,7 @@ export default function App() {
       zoneRef.current = createZoneTraversal({
         stage: act.id,
         actIndex: safeIdx,
-        zoneTitle: act.zoneTitle,
+        zoneTitle: locAct.zoneTitle,
         waves: act.zoneWaves,
         initialScore: carryScore,
         p1MaxHp: kromMaxHp,
@@ -423,7 +485,7 @@ export default function App() {
         p1MaxStamina: kromMaxStamina,
         p1DamageMult: kromDamageMult,
         p1DecapBonus: kromDecapBonus,
-        p2Name: act.bossName.toUpperCase(),
+        p2Name: locAct.bossName.toUpperCase(),
         p2Skin: act.bossSkin,
         p2MaxHp: act.bossHp,
         p2DamageMult: act.bossDamageMultiplier,
@@ -440,6 +502,8 @@ export default function App() {
           'act2_opening',
           'act3_opening',
           'act4_opening',
+          'act5_opening',
+          'act6_opening',
         ];
         startCutscene(openingIds[safeIdx] ?? 'act1_opening', 'ZONE_TRAVERSAL');
       }
@@ -447,9 +511,65 @@ export default function App() {
     [kromDamageMult, kromDecapBonus, kromMaxHp, kromMaxStamina, startCutscene]
   );
 
+  const startCoopZone = useCallback(
+    (coopKind: 'coop_local' | 'coop_wifi', stage: StageId, carryScore = 0) => {
+      const actIdx = Math.max(
+        0,
+        CAMPAIGN_ACTS.findIndex((a) => a.id === stage)
+      );
+      const act = CAMPAIGN_ACTS[actIdx] ?? CAMPAIGN_ACTS[0];
+      const lang = settingsRef.current.language;
+      const locAct = getLocalizedAct(actIdx, lang);
+
+      coopModeRef.current = coopKind;
+      setActiveActIndex(actIdx);
+      setSelectedStage(act.id);
+      setActiveNav('arena');
+      akaMenuRef.current.open = false;
+      rewardGrantedForMatchRef.current = false;
+      zoneRewardGrantedRef.current = false;
+      roundAdvanceTimerRef.current = 0;
+
+      zoneRef.current = createZoneTraversal({
+        stage: act.id,
+        actIndex: actIdx,
+        zoneTitle: locAct.zoneTitle,
+        waves: act.zoneWaves,
+        initialScore: carryScore,
+        p1MaxHp: kromMaxHp,
+        p1MaxStamina: kromMaxStamina,
+        p1DamageMult: kromDamageMult,
+        p1DecapBonus: kromDecapBonus,
+        isCoop: true,
+        p2Name: coopKind === 'coop_wifi' ? 'ALLIÉ AKA' : 'KAELEN J2',
+      });
+
+      matchRef.current = createInitialMatch({
+        stage: act.id,
+        mode: coopKind,
+        actIndex: actIdx,
+        initialScore: carryScore,
+        p1Name: 'KROM',
+        p1MaxHp: kromMaxHp,
+        p1MaxStamina: kromMaxStamina,
+        p1DamageMult: kromDamageMult,
+        p1DecapBonus: kromDecapBonus,
+        p2Name: locAct.bossName.toUpperCase(),
+        p2Skin: act.bossSkin,
+        p2MaxHp: act.bossHp,
+        p2DamageMult: act.bossDamageMultiplier,
+      });
+
+      setScreenState('ZONE_TRAVERSAL');
+    },
+    [kromDamageMult, kromDecapBonus, kromMaxHp, kromMaxStamina]
+  );
+
   const startModeMatch = useCallback(
     (mode: GameMode, stage: StageId) => {
-      const tr = TRANSLATIONS[settingsRef.current.language];
+      const lang = settingsRef.current.language;
+      const tr = TRANSLATIONS[lang];
+      coopModeRef.current = 'solo';
       setActiveNav('arena');
       akaMenuRef.current.open = false;
       rewardGrantedForMatchRef.current = false;
@@ -458,6 +578,7 @@ export default function App() {
 
       const stageBoss =
         CAMPAIGN_ACTS.find((a) => a.id === stage) ?? CAMPAIGN_ACTS[0];
+      const locBossAct = getLocalizedAct(stageBoss.actNumber - 1, lang);
 
       matchRef.current = createInitialMatch({
         stage,
@@ -470,10 +591,10 @@ export default function App() {
         p1DecapBonus: mode === 'local_2p' || mode === 'usb_serial' ? 0 : kromDecapBonus,
         p2Name:
           mode === 'quick_ai'
-            ? stageBoss.bossName.toUpperCase()
+            ? locBossAct.bossName.toUpperCase()
             : mode === 'usb_serial'
             ? 'AKA USB'
-            : 'RIVAL J2',
+            : 'RIVAL P2',
         p2Skin: mode === 'quick_ai' ? stageBoss.bossSkin : 'rival_aka',
         p2MaxHp: mode === 'quick_ai' ? stageBoss.bossHp : kromMaxHp,
         p2DamageMult: mode === 'quick_ai' ? stageBoss.bossDamageMultiplier : 1,
@@ -487,7 +608,9 @@ export default function App() {
 
   const startStudioFighterTest = useCallback(
     (stage: StageId, skin: FighterSkin) => {
-      const tr = TRANSLATIONS[settingsRef.current.language];
+      const lang = settingsRef.current.language;
+      const tr = TRANSLATIONS[lang];
+      coopModeRef.current = 'solo';
       setSelectedStage(stage);
       setActiveNav('arena');
       akaMenuRef.current.open = false;
@@ -502,6 +625,7 @@ export default function App() {
 
       if (isMinionSkin(skin)) {
         const minion = MINION_ARCHETYPES[skin];
+        const locMinion = getLocalizedMinion(skin, lang);
         const actIdx = Math.max(
           0,
           CAMPAIGN_ACTS.findIndex((a) => a.id === stage)
@@ -515,11 +639,11 @@ export default function App() {
           p1MaxStamina: kromMaxStamina,
           p1DamageMult: kromDamageMult,
           p1DecapBonus: kromDecapBonus,
-          p2Name: minion.shortName,
+          p2Name: locMinion.shortName,
           p2Skin: skin,
           p2MaxHp: Math.max(54, minion.hp * 2),
           p2DamageMult: minion.damageMultiplier,
-          bannerText: `${minion.shortName} · ${tr.fightWord}`,
+          bannerText: `${locMinion.shortName} · ${tr.fightWord}`,
         });
         setScreenState('PLAYING');
         return;
@@ -529,6 +653,7 @@ export default function App() {
         CAMPAIGN_ACTS.find((a) => a.bossSkin === skin) ??
         CAMPAIGN_ACTS.find((a) => a.id === stage) ??
         CAMPAIGN_ACTS[0];
+      const locBossAct = getLocalizedAct(bossAct.actNumber - 1, lang);
 
       matchRef.current = createInitialMatch({
         stage: bossAct.id,
@@ -539,7 +664,7 @@ export default function App() {
         p1MaxStamina: kromMaxStamina,
         p1DamageMult: kromDamageMult,
         p1DecapBonus: kromDecapBonus,
-        p2Name: bossAct.bossName.toUpperCase(),
+        p2Name: locBossAct.bossName.toUpperCase(),
         p2Skin: bossAct.bossSkin,
         p2MaxHp: bossAct.bossHp,
         p2DamageMult: bossAct.bossDamageMultiplier,
@@ -632,7 +757,13 @@ export default function App() {
         btnRun: keys.has('NumpadEnter'),
       };
 
-      if (mode === 'local_2p' && screenStateRef.current === 'PLAYING' && !akaMenuRef.current.open) {
+      const isLocalSplitActive =
+        !akaMenuRef.current.open &&
+        ((mode === 'local_2p' && screenStateRef.current === 'PLAYING') ||
+          (coopModeRef.current === 'coop_local' &&
+            screenStateRef.current === 'ZONE_TRAVERSAL'));
+
+      if (isLocalSplitActive) {
         return {
           p1: mergeInputs(wasdInput, shell, gpad),
           p2: arrowInput,
@@ -867,15 +998,27 @@ export default function App() {
           continue;
         }
 
-        // 4. NON-TOUCH TITLE MENU NAVIGATION (6 Options + D for Forge / L1 for Guide)
+        // 4. NON-TOUCH TITLE MENU NAVIGATION (7 Options + ◀/▶ Language + D Forge / L1 Guide)
         if (st === 'TITLE_MENU') {
           m.tick += 1;
           if (edgeUp) {
-            titleCursorRef.current = (titleCursorRef.current + 5) % 6;
+            titleCursorRef.current = (titleCursorRef.current + 6) % 7;
             akaAudio.playMenuBlip(false);
           } else if (edgeDown) {
-            titleCursorRef.current = (titleCursorRef.current + 1) % 6;
+            titleCursorRef.current = (titleCursorRef.current + 1) % 7;
             akaAudio.playMenuBlip(false);
+          } else if (edgeLeft || edgeRight) {
+            setSettings((s) => {
+              const curIdx = SUPPORTED_LANGUAGES.findIndex(
+                (l) => l.code === s.language
+              );
+              const delta = edgeLeft ? -1 : 1;
+              const nextIdx =
+                (curIdx + delta + SUPPORTED_LANGUAGES.length) %
+                SUPPORTED_LANGUAGES.length;
+              akaAudio.playMenuBlip(true);
+              return { ...s, language: SUPPORTED_LANGUAGES[nextIdx].code };
+            });
           } else if (edgeD) {
             akaAudio.playMenuBlip(true);
             openAkaForge('TITLE_MENU', null);
@@ -886,10 +1029,11 @@ export default function App() {
             akaAudio.playMenuBlip(true);
             const choice = titleCursorRef.current;
             if (choice === 0) startCampaignAtAct(progression.currentAct, 'full', 0);
-            else if (choice === 1) startModeMatch('quick_ai', selectedStage);
-            else if (choice === 2) openAkaForge('TITLE_MENU', null);
-            else if (choice === 3) openAkaCodex('TITLE_MENU');
-            else if (choice === 4) startModeMatch('local_2p', selectedStage);
+            else if (choice === 1) startCoopZone('coop_local', selectedStage, 0);
+            else if (choice === 2) startModeMatch('quick_ai', selectedStage);
+            else if (choice === 3) openAkaForge('TITLE_MENU', null);
+            else if (choice === 4) openAkaCodex('TITLE_MENU');
+            else if (choice === 5) startModeMatch('local_2p', selectedStage);
             else setActiveNav('multiplayer');
           }
           continue;
@@ -916,12 +1060,14 @@ export default function App() {
           } else if (edgeA) {
             const idx = forgeUiRef.current.cursor;
             const curProg = progressionRef.current;
+            const fg = getLocalizedForge(settingsRef.current.language);
             if (idx < 4) {
               const up = FORGE_UPGRADES[idx];
+              const locUp = fg.upgrades[up.key];
               const rank = curProg[up.key];
               const cost = up.baseCost + rank * up.costStep;
               if (rank >= 4) {
-                forgeUiRef.current.feedbackText = `${up.title} est déjà au rang maximum (4/4).`;
+                forgeUiRef.current.feedbackText = fg.feedback.maxRank(locUp.title);
                 akaAudio.playMenuBlip(false);
               } else if (curProg.steelShards >= cost) {
                 setProgression((prev) => ({
@@ -930,14 +1076,20 @@ export default function App() {
                   [up.key]: prev[up.key] + 1,
                 }));
                 forgeUiRef.current.sparkTick = 28;
-                forgeUiRef.current.feedbackText = `Forgé : ${up.title} -> ${up.formatEffect(rank + 1)} !`;
+                forgeUiRef.current.feedbackText = fg.feedback.forged(
+                  locUp.title,
+                  locUp.formatEffect(rank + 1)
+                );
                 akaAudio.playClash(true);
               } else {
-                forgeUiRef.current.feedbackText = `Il manque ${cost - curProg.steelShards} Éclats d’Acier (tuez des sbires ou boss).`;
+                forgeUiRef.current.feedbackText = fg.feedback.needShards(
+                  cost - curProg.steelShards
+                );
                 akaAudio.playMenuBlip(false);
               }
             } else {
               const tech = SWORD_TECHNIQUES[idx - 4];
+              const locTech = fg.techniques[tech.id];
               const unlocked = curProg.unlockedTechniques.includes(tech.id);
               if (unlocked) {
                 setProgression((prev) => ({
@@ -945,7 +1097,10 @@ export default function App() {
                   equippedTechnique: tech.id,
                 }));
                 forgeUiRef.current.sparkTick = 18;
-                forgeUiRef.current.feedbackText = `Botte équipée : ${tech.name} (${tech.inputHint}) !`;
+                forgeUiRef.current.feedbackText = fg.feedback.equipped(
+                  locTech.name,
+                  locTech.inputHint
+                );
                 akaAudio.playClash(true);
               } else if (curProg.steelShards >= tech.unlockCost) {
                 setProgression((prev) => ({
@@ -955,10 +1110,13 @@ export default function App() {
                   equippedTechnique: tech.id,
                 }));
                 forgeUiRef.current.sparkTick = 32;
-                forgeUiRef.current.feedbackText = `Botte apprise & équipée : ${tech.name} !`;
+                forgeUiRef.current.feedbackText = fg.feedback.learned(locTech.name);
                 akaAudio.playClash(true);
               } else {
-                forgeUiRef.current.feedbackText = `Il manque ${tech.unlockCost - curProg.steelShards} Éclats pour apprendre ${tech.name}.`;
+                forgeUiRef.current.feedbackText = fg.feedback.needTechShards(
+                  tech.unlockCost - curProg.steelShards,
+                  locTech.name
+                );
                 akaAudio.playMenuBlip(false);
               }
             }
@@ -1003,6 +1161,8 @@ export default function App() {
           const cs = cutsceneUiRef.current;
           const def = CUTSCENES[cs.cutsceneId] ?? CUTSCENES.act1_opening;
           const shot = def.shots[cs.shotIndex] ?? def.shots[0];
+          const locCs = getLocalizedCutscene(cs.cutsceneId, settingsRef.current.language);
+          const locShotText = locCs.shots[cs.shotIndex]?.text ?? shot.text;
 
           if (edgeB || edgeRun) {
             akaAudio.playMenuBlip(true);
@@ -1020,7 +1180,7 @@ export default function App() {
             continue;
           }
 
-          if (Math.floor(cs.shotTick * 1.6) >= shot.text.length) {
+          if (Math.floor(cs.shotTick * 1.35) >= locShotText.length) {
             cs.textRevealed = true;
           }
 
@@ -1089,9 +1249,35 @@ export default function App() {
           continue;
         }
 
-        // 5B. SIDE-SCROLLING ZONE TRAVERSAL (960x240 Double Dragon / Barbarian Transition!)
+        // 5B. SIDE-SCROLLING ZONE TRAVERSAL (Solo, Local 2P Co-op Horde, or WiFi Co-op Horde!)
         if (st === 'ZONE_TRAVERSAL') {
           const trZone = TRANSLATIONS[settingsRef.current.language];
+          const isWifiCoop =
+            coopModeRef.current === 'coop_wifi' && Boolean(wifi.roomCode);
+
+          if (isWifiCoop) {
+            wifi.sendInput(cur);
+            if (wifi.remoteZone) {
+              zoneRef.current = wifi.remoteZone;
+              if (wifi.remoteZone.zoneCompleted) {
+                handleAwardZoneOutcome(wifi.remoteZone);
+                matchRef.current.score = wifi.remoteZone.score;
+                setScreenState('MATCH_VICTORY');
+                continue;
+              }
+              if (wifi.remoteZone.playerDefeated) {
+                roundAdvanceTimerRef.current += 1;
+                if (roundAdvanceTimerRef.current > 65) {
+                  handleAwardZoneOutcome(wifi.remoteZone);
+                  matchRef.current.score = wifi.remoteZone.score;
+                  roundAdvanceTimerRef.current = 0;
+                  setScreenState('GAME_OVER');
+                }
+              }
+            }
+            continue;
+          }
+
           const zone = zoneRef.current;
           if (!zone) {
             setScreenState('PLAYING');
@@ -1104,12 +1290,28 @@ export default function App() {
             progression.equippedTechnique,
             audioCallbacks.current,
             trZone.zoneClearBanner,
-            settingsRef.current.goreMode
+            settingsRef.current.goreMode,
+            settingsRef.current.language,
+            inputs.p2,
+            'iron_riposte'
           );
 
           if (zone.zoneCompleted) {
             handleAwardZoneOutcome(zone);
+            if (coopModeRef.current === 'coop_local') {
+              matchRef.current.score = zone.score;
+              setProgression((prev) => ({
+                ...prev,
+                steelShards: prev.steelShards + 15,
+                totalWins: prev.totalWins + 1,
+              }));
+              roundAdvanceTimerRef.current = 0;
+              setScreenState('MATCH_VICTORY');
+              continue;
+            }
+
             const act = CAMPAIGN_ACTS[zone.actIndex] ?? CAMPAIGN_ACTS[0];
+            const locAct = getLocalizedAct(zone.actIndex, settingsRef.current.language);
             matchRef.current = createInitialMatch({
               stage: act.id,
               mode: 'campaign',
@@ -1122,7 +1324,7 @@ export default function App() {
               p1MaxStamina: kromMaxStamina,
               p1DamageMult: kromDamageMult,
               p1DecapBonus: kromDecapBonus,
-              p2Name: act.bossName.toUpperCase(),
+              p2Name: locAct.bossName.toUpperCase(),
               p2Skin: act.bossSkin,
               p2MaxHp: act.bossHp,
               p2DamageMult: act.bossDamageMultiplier,
@@ -1134,6 +1336,8 @@ export default function App() {
               'boss2_intro',
               'boss3_intro',
               'boss4_intro',
+              'boss5_intro',
+              'boss6_intro',
             ];
             startCutscene(bossIntroIds[zone.actIndex] ?? 'boss1_intro', 'PLAYING');
             continue;
@@ -1199,6 +1403,10 @@ export default function App() {
             st === 'MATCH_VICTORY' &&
             m.mode === 'campaign' &&
             activeActIndex < CAMPAIGN_ACTS.length - 1;
+          const canAdvanceCoopLocal =
+            st === 'MATCH_VICTORY' &&
+            m.mode === 'coop_local' &&
+            activeActIndex < CAMPAIGN_ACTS.length - 1;
 
           if (edgeD) {
             akaAudio.playMenuBlip(true);
@@ -1210,6 +1418,14 @@ export default function App() {
             akaAudio.playMenuBlip(true);
             if (canAdvance) {
               openAkaForge('MATCH_VICTORY', activeActIndex + 1);
+            } else if (canAdvanceCoopLocal) {
+              const nextAct = CAMPAIGN_ACTS[activeActIndex + 1] ?? CAMPAIGN_ACTS[0];
+              startCoopZone('coop_local', nextAct.id, m.score);
+            } else if (m.mode === 'coop_local') {
+              startCoopZone('coop_local', m.stage, 0);
+            } else if (m.mode === 'coop_wifi' && wifi.roomCode) {
+              wifi.requestRematch();
+              setScreenState('ZONE_TRAVERSAL');
             } else if (m.mode === 'wifi_multi' && wifi.roomCode) {
               wifi.requestRematch();
               setScreenState('PLAYING');
@@ -1220,7 +1436,12 @@ export default function App() {
             }
           } else if (edgeC) {
             akaAudio.playMenuBlip(true);
-            if (m.mode === 'wifi_multi' && wifi.roomCode) {
+            if (m.mode === 'coop_local') {
+              startCoopZone('coop_local', m.stage, 0);
+            } else if (m.mode === 'coop_wifi' && wifi.roomCode) {
+              wifi.requestRematch();
+              setScreenState('ZONE_TRAVERSAL');
+            } else if (m.mode === 'wifi_multi' && wifi.roomCode) {
               wifi.requestRematch();
               setScreenState('PLAYING');
             } else if (m.mode === 'campaign') {
@@ -1283,7 +1504,8 @@ export default function App() {
             audioCallbacks.current,
             tr.perfectParryBanner,
             tr.fatalDecapBanner,
-            settingsRef.current.goreMode
+            settingsRef.current.goreMode,
+            settingsRef.current.language
           );
 
           if (m.mode === 'usb_serial' && usb.connected) {
@@ -1360,6 +1582,7 @@ export default function App() {
     readLocalInputs,
     selectedStage,
     startCampaignAtAct,
+    startCoopZone,
     startCutscene,
     startModeMatch,
     usb,
@@ -1432,10 +1655,13 @@ export default function App() {
   };
 
   const t = TRANSLATIONS[settings.language];
-  const activeAct = CAMPAIGN_ACTS[activeActIndex] ?? CAMPAIGN_ACTS[0];
+  const ui = getLocalizedWebUi(settings.language);
+  const locActiveAct = getLocalizedAct(activeActIndex, settings.language);
   const wifiBannerText =
-    matchRef.current.mode === 'wifi_multi' && wifi.roomCode
-      ? `WIFI ${wifi.roomCode} · ${wifi.role === 'aka' ? 'AKA' : 'PC'}`
+    matchRef.current.mode === 'coop_wifi' && wifi.roomCode
+      ? `WIFI COOP ${wifi.roomCode} · ${wifi.role === 'aka' ? 'AKA' : 'PC'}`
+      : matchRef.current.mode === 'wifi_multi' && wifi.roomCode
+      ? `WIFI 1V1 ${wifi.roomCode} · ${wifi.role === 'aka' ? 'AKA' : 'PC'}`
       : matchRef.current.mode === 'usb_serial'
       ? `USB AKA · ${usb.connected ? '115200B' : 'OFF'}`
       : null;
@@ -1566,7 +1792,7 @@ export default function App() {
             activeNav === 'chronicle' ? 'text-amber-400 font-semibold' : 'text-slate-300'
           }`}
         >
-          Boss
+          {ui.mobileNavBoss}
         </button>
         <button
           type="button"
@@ -1575,7 +1801,7 @@ export default function App() {
             activeNav === 'forge' ? 'text-amber-400 font-semibold' : 'text-slate-300'
           }`}
         >
-          Forge
+          {t.navForge}
         </button>
         <button
           type="button"
@@ -1584,7 +1810,7 @@ export default function App() {
             activeNav === 'multiplayer' ? 'text-amber-400 font-semibold' : 'text-slate-300'
           }`}
         >
-          GitHub & AKA
+          {t.navMultiplayer}
         </button>
       </div>
 
@@ -1603,6 +1829,11 @@ export default function App() {
                   akaAudio.playMenuBlip(true);
                   setSettings((s) => ({ ...s, goreMode: mode }));
                 }}
+                onChangeLanguage={(lang) => {
+                  akaAudio.unlockAudio();
+                  akaAudio.playMenuBlip(true);
+                  setSettings((s) => ({ ...s, language: lang }));
+                }}
                 activeInputPreview={activeInputPreview}
                 onButtonChange={handleShellButtonChange}
                 onJoystickMove={handleJoystickMove}
@@ -1611,6 +1842,7 @@ export default function App() {
 
               <CombatGuidePanel
                 progression={progression}
+                language={settings.language}
                 onOpenAkaCodexScreen={() => {
                   akaAudio.unlockAudio();
                   const ret =
@@ -1649,14 +1881,14 @@ export default function App() {
                   <div className="relative h-36 overflow-hidden bg-slate-950">
                     <img
                       src={HERO_BANNER_IMAGE}
-                      alt="Duel barbare à l’épée dans l’arène aux flambeaux"
+                      alt={t.brandTitle}
                       referrerPolicy="no-referrer"
                       onError={() => setHeroImgFailed(true)}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#151921] via-black/35 to-transparent" />
                     <div className="absolute bottom-3 left-4 right-4 text-xs text-amber-300 font-semibold">
-                      {activeAct.title}
+                      {locActiveAct.title}
                     </div>
                   </div>
                 )}
@@ -1664,20 +1896,25 @@ export default function App() {
                 <div className="p-5 space-y-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-white">
-                      Système Gamebuino AKA
+                      {ui.sidebarSystemTitle}
                     </h3>
                     <p className="text-xs text-slate-400 tabular-nums">
-                      {kromMaxHp} PV · +{progression.bladeRank * 12}% Acier ·{' '}
-                      {progression.steelShards} Éclats
+                      {ui.sidebarStatsLine(
+                        kromMaxHp,
+                        progression.bladeRank * 12,
+                        progression.steelShards
+                      )}
                     </p>
                     <p className="text-xs font-mono text-amber-300/90 tabular-nums">
-                      Record {progression.highScore.toLocaleString('fr-FR')} PTS ·{' '}
-                      {progression.totalMinionsSlain} Sbires vaincus
+                      {ui.sidebarRecordLine(
+                        progression.highScore.toLocaleString(settings.language),
+                        progression.totalMinionsSlain
+                      )}
                     </p>
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Appuyez sur <strong>MENU</strong> (<code className="font-mono text-amber-300">Échap</code>) pour la Pause, l’<strong>Aide Coups & Parades</strong> et le mode d’impact (<strong>Soft / Normal / Gore</strong>). Les cinématiques se passent à tout moment avec <strong>B</strong> ou <strong>RUN</strong>.
+                    {ui.sidebarHelpBody}
                   </p>
 
                   <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-2">
@@ -1694,7 +1931,7 @@ export default function App() {
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold text-sky-200 bg-[#0C0E12] hover:bg-slate-800 border border-sky-700/60 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <BookOpen className="w-3.5 h-3.5 text-sky-400" />
-                      <span>Guide Coups & Parades (Écran AKA)</span>
+                      <span>{ui.sidebarBtnCodex}</span>
                     </button>
 
                     <button
@@ -1710,7 +1947,7 @@ export default function App() {
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold text-amber-200 bg-[#0C0E12] hover:bg-slate-800 border border-amber-700/60 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer tabular-nums"
                     >
                       <Flame className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Forge & Bottes ({progression.steelShards} Éclats)</span>
+                      <span>{ui.sidebarBtnForge(progression.steelShards)}</span>
                     </button>
 
                     <button
@@ -1719,7 +1956,7 @@ export default function App() {
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold text-slate-200 bg-[#0C0E12] hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <Layers className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Planches Sprites, Décors & Animations</span>
+                      <span>{ui.sidebarBtnSheets}</span>
                     </button>
 
                     <button
@@ -1732,7 +1969,7 @@ export default function App() {
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold text-slate-200 bg-[#0C0E12] hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <HardDrive className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Voir le Bootloader (/Firmware)</span>
+                      <span>{ui.sidebarBtnLoader}</span>
                     </button>
 
                     <button
@@ -1741,7 +1978,7 @@ export default function App() {
                       className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <GitBranch className="w-3.5 h-3.5" />
-                      <span>GitHub Release & Liaison AKA</span>
+                      <span>{ui.sidebarBtnGithub}</span>
                     </button>
                   </div>
                 </div>
@@ -1762,6 +1999,7 @@ export default function App() {
         {activeNav === 'chronicle' && (
           <CampaignChronicle
             progression={progression}
+            language={settings.language}
             onSelectActToPlay={(idx, entryMode) => {
               akaAudio.unlockAudio();
               startCampaignAtAct(idx, entryMode, 0);
@@ -1769,8 +2007,9 @@ export default function App() {
             onPlayCutscene={(cutsceneId, actIdx) => {
               akaAudio.unlockAudio();
               if (cutsceneId === 'campaign_ending') {
-                setActiveActIndex(3);
-                setSelectedStage(CAMPAIGN_ACTS[3].id);
+                const finalIdx = CAMPAIGN_ACTS.length - 1;
+                setActiveActIndex(finalIdx);
+                setSelectedStage(CAMPAIGN_ACTS[finalIdx].id);
                 startCutscene('campaign_ending', 'TITLE_MENU');
               } else {
                 startCampaignAtAct(actIdx, 'full', 0);
@@ -1782,6 +2021,7 @@ export default function App() {
         {activeNav === 'forge' && (
           <ProgressionForge
             progression={progression}
+            language={settings.language}
             onPurchaseUpgrade={handlePurchaseUpgrade}
             onUnlockTechnique={handleUnlockTechnique}
             onEquipTechnique={handleEquipTechnique}
@@ -1794,9 +2034,11 @@ export default function App() {
           <MultiplayerPanel
             wifi={wifi}
             usb={usb}
+            language={settings.language}
             selectedStage={selectedStage}
             onSelectStage={setSelectedStage}
             onLaunchWifiArena={(asRole) => {
+              coopModeRef.current = 'solo';
               setActiveNav('arena');
               akaMenuRef.current.open = false;
               if (asRole === 'aka') {
@@ -1813,19 +2055,26 @@ export default function App() {
               });
               setScreenState('PLAYING');
             }}
+            onLaunchWifiCoop={(asRole) => {
+              akaAudio.unlockAudio();
+              if (asRole === 'aka') {
+                setShellStyle('aka_console');
+              }
+              startCoopZone('coop_wifi', selectedStage, 0);
+            }}
             onLaunchUsbArena={() => startModeMatch('usb_serial', selectedStage)}
             onLaunchLocal2P={() => startModeMatch('local_2p', selectedStage)}
+            onLaunchCoopLocal={() => {
+              akaAudio.unlockAudio();
+              startCoopZone('coop_local', selectedStage, 0);
+            }}
           />
         )}
       </main>
 
       <footer className="border-t border-slate-800/80 px-6 py-4 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4">
-        <span>
-          Krom : Le Glaive d’Acier · Gamebuino AKA 320×240 Non-Tactile · /Krom_Barbarian/Firmware
-        </span>
-        <span>
-          Joystick · Pavé · A/B/C/D · L1/R1 · MENU (6 Langues, Volumes, Pause, Loader) · RUN · GitHub Release Workflow
-        </span>
+        <span>{ui.footerLeft}</span>
+        <span>{ui.footerRight}</span>
       </footer>
     </div>
   );

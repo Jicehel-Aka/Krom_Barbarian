@@ -235,44 +235,58 @@ static const char* const kLangCodes[] = { "fr", "en", "pt", "es", "it", "de" };
 static const char* const kLangNames[] = { "Francais", "English", "Portugues", "Espanol", "Italiano", "Deutsch" };
 static const int kLangCount = 6;
 
+// Tronque un texte pour qu'il tienne dans la largeur de la boite du menu --
+// evite tout debordement hors du cadre (24..296) quelle que soit la langue.
+static char s_truncBuf[3][40];
+static const char* truncate_to_fit(const char* s, int maxChars, int bufIdx) {
+    char* buf = s_truncBuf[bufIdx];
+    size_t len = strlen(s);
+    if ((int)len <= maxChars) { snprintf(buf, 40, "%s", s); return buf; }
+    int keep = maxChars - 2; if (keep < 0) keep = 0;
+    memcpy(buf, s, keep);
+    buf[keep] = '.';
+    buf[keep+1] = '.';
+    buf[keep+2] = '\0';
+    return buf;
+}
+
 static void menu_frame(const char* titleKey) {
     gfx.setColor(gfx.makeColor(10, 10, 30));
-    gfx.fillRect(40, 20, 240, 200);
+    gfx.fillRect(24, 18, 272, 204);
     gfx.setColor(gfx.makeColor(255, 255, 255));
-    gfx.drawRect(40, 20, 240, 200);
+    gfx.drawRect(24, 18, 272, 204);
     gfx.setColor(gfx.makeColor(255, 220, 0));
-    gfx.move_cursor(52, 28);
-    gfx.print_str(akaRuntime.translate(titleKey));
+    gfx.move_cursor(34, 26);
+    gfx.print_str(truncate_to_fit(akaRuntime.translate(titleKey), 31, 0));
     gfx.setColor(gfx.makeColor(255, 255, 255));
 
-    // Legende des touches -- absente jusqu'ici, aucune indication de
-    // validation/annulation nulle part dans le menu.
+    // Legende des touches en bas du cadre
     gfx.setColor(gfx.makeColor(160, 160, 160));
-    gfx.move_cursor(52, 206);
-    gfx.print_str(akaRuntime.translate("MENU_LEGEND"));
+    gfx.move_cursor(34, 208);
+    gfx.print_str(truncate_to_fit(akaRuntime.translate("MENU_LEGEND"), 31, 1));
     gfx.setColor(gfx.makeColor(255, 255, 255));
 }
 
 void AkaRuntime::menuDrawMain() {
     menu_frame("MENU_TITLE");
     for (int i = 0; i < s_menuCount; ++i) {
-        int y = 50 + i * 16;
+        int y = 48 + i * 16;
         bool sel = (i == s_menuSel);
         gfx.setColor(sel ? gfx.makeColor(255, 220, 0) : gfx.makeColor(255, 255, 255));
-        gfx.move_cursor(52, y);
+        gfx.move_cursor(34, y);
         gfx.print_str(sel ? ">" : " ");
-        gfx.move_cursor(64, y);
-        gfx.print_str(translate(s_menuKeys[i]));
+        gfx.move_cursor(46, y);
+        gfx.print_str(truncate_to_fit(translate(s_menuKeys[i]), 30, 0));
     }
 }
 
 void AkaRuntime::menuDrawControls() {
     menu_frame("MENU_CONTROLS");
-    int y = 50;
+    int y = 48;
     if (m_controlsKeys) {
-        for (int i = 0; m_controlsKeys[i] != nullptr && y < 205; ++i, y += 14) {
-            gfx.move_cursor(52, y);
-            gfx.print_str(translate(m_controlsKeys[i]));
+        for (int i = 0; m_controlsKeys[i] != nullptr && y < 200; ++i, y += 16) {
+            gfx.move_cursor(34, y);
+            gfx.print_str(truncate_to_fit(translate(m_controlsKeys[i]), 31, 0));
         }
     }
 }
@@ -280,51 +294,34 @@ void AkaRuntime::menuDrawControls() {
 void AkaRuntime::menuDrawLanguage() {
     menu_frame("MENU_LANGUAGE");
     for (int i = 0; i < kLangCount; ++i) {
-        int y = 50 + i * 16;
+        int y = 48 + i * 16;
         bool sel = (i == s_langSel);
-        gfx.setColor(sel ? gfx.makeColor(255, 220, 0) : gfx.makeColor(255, 255, 255));
-        gfx.move_cursor(52, y);
-        gfx.print_str(sel ? ">" : " ");
-        gfx.move_cursor(64, y);
+        bool active = (strcmp(m_language, kLangCodes[i]) == 0);
+        gfx.setColor(sel ? gfx.makeColor(255, 220, 0)
+                         : (active ? gfx.makeColor(120, 240, 140) : gfx.makeColor(255, 255, 255)));
+        gfx.move_cursor(34, y);
+        gfx.print_str(sel ? ">" : (active ? "*" : " "));
+        gfx.move_cursor(46, y);
         gfx.print_str(kLangNames[i]);
     }
 }
 
-// Tronque un texte pour qu'il tienne dans la largeur de la boite du menu --
-// BUG TROUVE ET CORRIGE (Galaxy Fighter) : un texte plus long que la boite
-// (ex: URL de depot) laissait des residus visibles hors zone apres un
-// changement d'ecran, car seule la boite elle-meme est effacee a chaque
-// rafraichissement, pas le debordement au-dela.
-static char s_truncBuf[3][40];
-static const char* truncate_to_fit(const char* s, int maxChars, int bufIdx) {
-    char* buf = s_truncBuf[bufIdx];
-    size_t len = strlen(s);
-    if ((int)len <= maxChars) { snprintf(buf, 40, "%s", s); return buf; }
-    int keep = maxChars - 3; if (keep < 0) keep = 0;
-    memcpy(buf, s, keep);
-    buf[keep] = buf[keep+1] = buf[keep+2] = '.';
-    buf[keep+3] = '\0';
-    return buf;
-}
-
 void AkaRuntime::menuDrawCredits() {
     menu_frame("MENU_CREDITS");
-    int y = 50;
-    gfx.move_cursor(52, y); gfx.print_str(truncate_to_fit(m_title, 28, 0)); y += 16;
-    gfx.move_cursor(52, y); gfx.print_str(translate("CREDITS_AUTHOR")); y += 12;
-    gfx.move_cursor(60, y); gfx.print_str(truncate_to_fit(m_author, 26, 0)); y += 20;
-    gfx.move_cursor(52, y); gfx.print_str(translate("CREDITS_LICENSE")); y += 12;
-    gfx.move_cursor(60, y); gfx.print_str(truncate_to_fit(m_license, 26, 0)); y += 20;
-    gfx.move_cursor(52, y); gfx.print_str(translate("CREDITS_SOURCE")); y += 12;
-    // Source (souvent la plus longue, ex: URL github) : repartie sur 2
-    // lignes plutot que tronquee brutalement, plus lisible.
+    int y = 48;
+    gfx.move_cursor(34, y); gfx.print_str(truncate_to_fit(m_title, 31, 0)); y += 16;
+    gfx.move_cursor(34, y); gfx.print_str(truncate_to_fit(translate("CREDITS_AUTHOR"), 31, 0)); y += 12;
+    gfx.move_cursor(42, y); gfx.print_str(truncate_to_fit(m_author, 30, 0)); y += 20;
+    gfx.move_cursor(34, y); gfx.print_str(truncate_to_fit(translate("CREDITS_LICENSE"), 31, 0)); y += 12;
+    gfx.move_cursor(42, y); gfx.print_str(truncate_to_fit(m_license, 30, 0)); y += 20;
+    gfx.move_cursor(34, y); gfx.print_str(truncate_to_fit(translate("CREDITS_SOURCE"), 31, 0)); y += 12;
     size_t srcLen = strlen(m_sourceUrl);
-    if (srcLen > 26) {
-        char line1[27]; memcpy(line1, m_sourceUrl, 26); line1[26] = '\0';
-        gfx.move_cursor(60, y); gfx.print_str(line1); y += 12;
-        gfx.move_cursor(60, y); gfx.print_str(truncate_to_fit(m_sourceUrl + 26, 26, 1));
+    if (srcLen > 30) {
+        char line1[31]; memcpy(line1, m_sourceUrl, 30); line1[30] = '\0';
+        gfx.move_cursor(42, y); gfx.print_str(line1); y += 12;
+        gfx.move_cursor(42, y); gfx.print_str(truncate_to_fit(m_sourceUrl + 30, 30, 1));
     } else {
-        gfx.move_cursor(60, y); gfx.print_str(m_sourceUrl);
+        gfx.move_cursor(42, y); gfx.print_str(m_sourceUrl);
     }
 }
 
@@ -333,32 +330,25 @@ void AkaRuntime::menuDrawVolume() {
     const char* rowKeys[2] = { "MENU_VOL_MUSIC", "MENU_VOL_SFX" };
     uint8_t vols[2] = { s_musicVolume, s_sfxVolume };
     for (int i = 0; i < 2; ++i) {
-        int y = 55 + i * 30;
+        int y = 55 + i * 32;
         bool sel = (i == s_volumeSel);
         gfx.setColor(sel ? gfx.makeColor(255, 220, 0) : gfx.makeColor(255, 255, 255));
-        gfx.move_cursor(52, y);
+        gfx.move_cursor(34, y);
         gfx.print_str(sel ? ">" : " ");
-        gfx.move_cursor(64, y);
-        gfx.print_str(translate(rowKeys[i]));
-        // barre de progression simple (0-100 -> 0-160 px)
-        int barY = y + 12, barW = (vols[i] * 160) / 100;
+        gfx.move_cursor(46, y);
+        gfx.print_str(truncate_to_fit(translate(rowKeys[i]), 30, 0));
+        // barre de progression simple (0-100 -> 0-200 px)
+        int barY = y + 13, barW = (vols[i] * 200) / 100;
         gfx.setColor(gfx.makeColor(80, 80, 80));
-        gfx.fillRect(64, barY, 160, 6);
+        gfx.fillRect(46, barY, 200, 6);
         gfx.setColor(gfx.makeColor(80, 220, 80));
-        gfx.fillRect(64, barY, barW, 6);
+        gfx.fillRect(46, barY, barW, 6);
     }
 }
 
-// Efface la zone occupee par la boite du menu avant de rendre la main au
-// jeu -- BUG TROUVE ET CORRIGE : certains jeux ne redessinent pas tout
-// l'ecran a chaque frame (optimisation courante dans cette bibliotheque),
-// donc rien ne venait effacer le contour du menu apres sa fermeture, qui
-// restait visible indefiniment par-dessus le jeu. Le jeu redessine son
-// propre contenu par-dessus des l'image suivante -- ce nettoyage n'est
-// visible qu'une fraction de frame.
 static void clear_menu_box() {
     gfx.setColor(gfx.makeColor(0, 0, 0));
-    gfx.fillRect(40, 20, 240, 200);
+    gfx.fillRect(24, 18, 272, 204);
     gfx.update();
 }
 
@@ -387,7 +377,17 @@ bool AkaRuntime::menuHandleInput(const Keys& k) {
                     case MenuAction::GameSelect:    if (m_gameMenuCallback) m_gameMenuCallback();
                                                      clear_menu_box(); s_menuState = MenuState::Closed; return false;
                     case MenuAction::Controls:     s_menuState = MenuState::Controls; break;
-                    case MenuAction::Language:     s_menuState = MenuState::Language; s_langSel = 0; break;
+                    case MenuAction::Language: {
+                        s_menuState = MenuState::Language;
+                        s_langSel = 0;
+                        for (int li = 0; li < kLangCount; ++li) {
+                            if (strcmp(m_language, kLangCodes[li]) == 0) {
+                                s_langSel = (int8_t)li;
+                                break;
+                            }
+                        }
+                        break;
+                    }
                     case MenuAction::Volume:       s_menuState = MenuState::Volume; s_volumeSel = 0; break;
                     case MenuAction::Credits:      s_menuState = MenuState::Credits; break;
                     case MenuAction::ReturnLoader: returnToLoader(); break;
@@ -583,8 +583,51 @@ void AkaRuntime::setLanguage(const char* code) {
     save_settings(m_language);
 }
 
+struct BuiltinLangEntry {
+    const char* key;
+    const char* vals[6]; // 0:fr, 1:en, 2:pt, 3:es, 4:it, 5:de
+};
+
+static const BuiltinLangEntry kBuiltinLangTable[] = {
+    {"MENU_TITLE", {"MENU SYSTEME AKA", "AKA SYSTEM MENU", "MENU DO SISTEMA AKA", "MENU DEL SISTEMA AKA", "MENU DI SISTEMA AKA", "AKA-SYSTEMMENU"}},
+    {"MENU_RESUME", {"Reprendre la partie", "Resume game", "Voltar ao jogo", "Volver al juego", "Torna al gioco", "Zuruck zum Spiel"}},
+    {"MENU_GAME_SELECT", {"Ecran Titre", "Title Screen", "Tela Inicial", "Pantalla Titulo", "Schermata Titolo", "Titelbildschirm"}},
+    {"MENU_CONTROLS", {"Commandes", "Controls", "Controles", "Controles", "Comandi", "Steuerung"}},
+    {"MENU_LANGUAGE", {"Langue", "Language", "Idioma", "Idioma", "Lingua", "Sprache"}},
+    {"MENU_VOLUME", {"Volume audio", "Audio volume", "Volume de audio", "Volumen de audio", "Volume audio", "Lautstarke"}},
+    {"MENU_VOL_MUSIC", {"Musique", "Music", "Musica", "Musica", "Musica", "Musik"}},
+    {"MENU_VOL_SFX", {"Effets sonores", "Sound effects", "Efeitos sonoros", "Efectos de sonido", "Effetti sonori", "Soundeffekte"}},
+    {"MENU_CREDITS", {"Credits", "Credits", "Creditos", "Creditos", "Crediti", "Credits"}},
+    {"MENU_RETURN_LOADER", {"Retourner au Loader", "Return to Loader", "Voltar ao Loader", "Volver al Loader", "Torna al Loader", "Zuruck zum Loader"}},
+    {"MENU_LEGEND", {"A:Valider  C/MENU:Retour", "A:Confirm  C/MENU:Back", "A:OK  C/MENU:Voltar", "A:Aceptar  C/MENU:Volver", "A:OK  C/MENU:Indietro", "A:OK  C/MENU:Zuruck"}},
+    {"CREDITS_AUTHOR", {"Auteur :", "Author:", "Autor:", "Autor:", "Autore:", "Autor:"}},
+    {"CREDITS_LICENSE", {"Licence :", "License:", "Licenca:", "Licencia:", "Licenza:", "Lizenz:"}},
+    {"CREDITS_SOURCE", {"Code & Release :", "Source & Release:", "Codigo & Release:", "Codigo y Release:", "Codice e Release:", "Quellcode & Release:"}},
+    {"CTRL_1", {"DPad/Stick: Marche/Saut/Bas", "DPad/Stick: Move/Jump/Duck", "DPad/Stick: Mover/Pulo/Ag.", "DPad/Stick: Mover/Salto/Ab.", "DPad/Stick: Muovi/Salta/Giu", "DPad/Stick: Lauf/Sprung/Ab"}},
+    {"CTRL_2", {"A : Taille Vive / Estoc", "A: Quick Slash / Thrust", "A: Corte Rapido / Estocada", "A: Tajo Veloz / Estocada", "A: Fendente / Affondo", "A: Schneller Hieb / Stich"}},
+    {"CTRL_3", {"B : Balayage Bas", "B: Low Sweep", "B: Rasteira Baixa", "B: Barrido Bajo", "B: Spazzata Bassa", "B: Tiefer Feger"}},
+    {"CTRL_4", {"C : Moulinet Decapitant", "C: 360 Decapitating Spin", "C: Giro Decapitador 360", "C: Giro Decapitador 360", "C: Giro Decapitante 360", "C: 360-Enthauptungswirbel"}},
+    {"CTRL_5", {"D : Roulade / Forge", "D: Dodge Roll / Forge", "D: Rolamento / Forja", "D: Rodar / Forja", "D: Capriola / Forgia", "D: Ausweichrolle / Schmiede"}},
+    {"CTRL_6", {"L1: Parade  |  R1: Fendoir", "L1: Parry | R1: Heavy Chop", "L1: Defesa | R1: Golpe Pes.", "L1: Parada | R1: Fendiente", "L1: Parata | R1: Colpo Pes.", "L1: Parade | R1: Spalter"}},
+    {"CTRL_7", {"MENU: Pause | +RUN: Loader", "MENU: Pause | +RUN: Loader", "MENU: Pausa | +RUN: Loader", "MENU: Pausa | +RUN: Loader", "MENU: Pausa | +RUN: Loader", "MENU: Pause | +RUN: Loader"}},
+};
+
 const char* AkaRuntime::translate(const char* key) const {
     for (int i = s_langCount - 1; i >= 0; --i)   // ordre inverse : specifique au jeu prioritaire
         if (strcmp(s_langKeys[i], key) == 0) return s_langVals[i];
+
+    int langIdx = 0;
+    for (int li = 0; li < kLangCount; ++li) {
+        if (strcmp(m_language, kLangCodes[li]) == 0) {
+            langIdx = li;
+            break;
+        }
+    }
+    const int nBuiltin = (int)(sizeof(kBuiltinLangTable) / sizeof(kBuiltinLangTable[0]));
+    for (int bi = 0; bi < nBuiltin; ++bi) {
+        if (strcmp(kBuiltinLangTable[bi].key, key) == 0) {
+            return kBuiltinLangTable[bi].vals[langIdx];
+        }
+    }
     return key;
 }

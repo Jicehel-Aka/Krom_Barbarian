@@ -30,8 +30,6 @@ namespace {
 
 // ============================================================================
 // 1. AUDIO ENGINE — 4-Track Hardware Mixer + 16-Section Song Arrangement
-//    Plays core Theme/Verse parts multiple times & inserts Calm/Epic Bridges
-//    periodically before relaunching the Main Theme!
 // ============================================================================
 
 static gb_audio_player g_audio;
@@ -80,45 +78,45 @@ enum SectionRole : uint8_t {
 };
 
 struct SongSlot {
-    uint8_t part;       // 0..7 (each part = 32 steps)
-    uint8_t role;       // SectionRole
-    uint8_t leadWave;   // 0 = SQUARE, 1 = TRIANGLE, 2 = SINE
-    bool withCounter;   // Weave bardic counter-notes in rests / bridges
-    bool pickupFill;    // Drum/timpani roll in steps 24..31 to relaunch Theme A
+    uint8_t part;
+    uint8_t role;
+    uint8_t leadWave;
+    bool withCounter;
+    bool pickupFill;
 };
 
 struct SongData {
     uint16_t stepMs;
-    SongSlot arrangement[16]; // 16 x 32 = 512 steps (~70-95s full song form!)
-    uint8_t bass[256];        // 8 x 32-step parts
-    uint8_t lead[256];        // 8 x 32-step parts
-    uint8_t counter[64];      // Lute/harp counter-arpeggio
-    const char* drumMain;     // 16-step groove
-    const char* drumBridge;   // 16-step calm bridge groove
-    const char* drumFill;     // 8-step relaunch fill
+    SongSlot arrangement[16];
+    uint8_t bass[256];
+    uint8_t lead[256];
+    uint8_t counter[64];
+    const char* drumMain;
+    const char* drumBridge;
+    const char* drumFill;
 };
 
 static const SongData SONGS[MUS_COUNT] = {
-    // 0. TITLE — "Anvil of Krom" (~94s structured song)
+    // 0. TITLE — "Anvil of Krom"
     {
         184,
         {
-            {0, ROLE_THEME, 0, false, false},       // Theme A
-            {1, ROLE_THEME, 0, false, false},       // Answer A'
-            {0, ROLE_THEME, 0, true,  false},       // Theme A + Counter
-            {2, ROLE_VERSE, 1, true,  true},        // Verse B
-            {0, ROLE_THEME, 0, false, false},       // Theme A
-            {1, ROLE_THEME, 0, true,  false},       // Answer A'
-            {3, ROLE_BRIDGE_CALM, 1, true, true},   // PONT 1 (Calm Lute Bridge -> Pickup!)
-            {0, ROLE_THEME, 0, true,  false},       // Triumphant Return to Theme A!
-            {2, ROLE_VERSE, 0, true,  false},       // Verse B (Brass)
-            {4, ROLE_VERSE, 1, true,  true},        // Rising Storm B'
-            {5, ROLE_CLIMAX, 0, true, false},       // Climax A''
-            {0, ROLE_THEME, 1, true,  false},       // Theme A (Highland Horn)
-            {6, ROLE_BRIDGE_EPIC, 1, true, true},   // PONT 2 (Counterpoint Bridge -> Pickup!)
-            {0, ROLE_THEME, 0, false, false},       // Bold Return to Theme A
-            {1, ROLE_THEME, 0, true,  false},       // Final Answer A'
-            {7, ROLE_CODA,  0, false, false},       // Noble Coda & Breath
+            {0, ROLE_THEME, 0, false, false},
+            {1, ROLE_THEME, 0, false, false},
+            {0, ROLE_THEME, 0, true,  false},
+            {2, ROLE_VERSE, 1, true,  true},
+            {0, ROLE_THEME, 0, false, false},
+            {1, ROLE_THEME, 0, true,  false},
+            {3, ROLE_BRIDGE_CALM, 1, true, true},
+            {0, ROLE_THEME, 0, true,  false},
+            {2, ROLE_VERSE, 0, true,  false},
+            {4, ROLE_VERSE, 1, true,  true},
+            {5, ROLE_CLIMAX, 0, true, false},
+            {0, ROLE_THEME, 1, true,  false},
+            {6, ROLE_BRIDGE_EPIC, 1, true, true},
+            {0, ROLE_THEME, 0, false, false},
+            {1, ROLE_THEME, 0, true,  false},
+            {7, ROLE_CODA,  0, false, false},
         },
         {
             38,0,38,38,45,0,38,0,41,0,41,43,45,0,38,0, 38,0,38,38,45,0,46,0,43,0,41,0,36,0,38,0,
@@ -146,7 +144,7 @@ static const SongData SONGS[MUS_COUNT] = {
         },
         "K..KK.T.K.T.S.T.", "K.....H...T...H.", "K.T.T.SS"
     },
-    // 1. FOREST — "Wilderness of Doom" (~77s structured song)
+    // 1. FOREST — "Wilderness of Doom"
     {
         150,
         {
@@ -193,7 +191,7 @@ static const SongData SONGS[MUS_COUNT] = {
         },
         "K.H.T.H.K.T.S.T.", "K...H...T...H...", "T.T.K.SS"
     },
-    // 2. CRYPT — "Catacombs of Vorgath" (~88s structured song)
+    // 2. CRYPT — "Catacombs of Vorgath"
     {
         172,
         {
@@ -240,7 +238,7 @@ static const SongData SONGS[MUS_COUNT] = {
         },
         "K...T.H.K..KS...", "K.......T...H...", "K...T.TS"
     },
-    // 3. ARENA — "Blood & Sand Coliseum" (~70s structured song)
+    // 3. ARENA — "Blood & Sand Coliseum"
     {
         136,
         {
@@ -287,7 +285,7 @@ static const SongData SONGS[MUS_COUNT] = {
         },
         "K.T.S.T.K.K.S.TT", "K..T..T.K..T..H.", "T.TTK.SS"
     },
-    // 4. SANCTUARY — "Altar of Seigneur Drax" (~66s structured song)
+    // 4. SANCTUARY — "Altar of Seigneur Drax"
     {
         128,
         {
@@ -366,7 +364,6 @@ static void stepMusicSequencer(uint32_t nowMs) {
     const bool isEpicBridge = (slot.role == ROLE_BRIDGE_EPIC);
     const bool isCodaTail = (slot.role == ROLE_CODA && localStep >= 20);
 
-    // 1. Lead melody with multi-step legato hold
     uint8_t leadNote = s.lead[partStep];
     if (leadNote > 0) {
         uint8_t hold = 1;
@@ -381,7 +378,6 @@ static void stepMusicSequencer(uint32_t nowMs) {
         float f = midiToFreq(leadNote);
         g_trackLead.play_tone(f, f * 0.998f, isCalmBridge ? 0.55f : 0.72f, 0.08f, durMs, wave);
     } else if (!isCodaTail && (slot.withCounter || isCalmBridge || isEpicBridge)) {
-        // Weave delicate lute/harp counter-arpeggio into lead rests & bridges!
         uint8_t cntIdx = ((slotIdx & 1) * 32 + localStep) & 63;
         uint8_t cntNote = s.counter[cntIdx];
         if (cntNote > 0) {
@@ -392,7 +388,6 @@ static void stepMusicSequencer(uint32_t nowMs) {
         }
     }
 
-    // 2. Bassline with open-pedal sustain
     uint8_t bassNote = s.bass[partStep];
     if (bassNote > 0) {
         uint8_t hold = 1;
@@ -406,7 +401,6 @@ static void stepMusicSequencer(uint32_t nowMs) {
                               isCalmBridge ? gb_audio_track_tone::TRIANGLE : gb_audio_track_tone::SQUARE);
     }
 
-    // 3. Dynamic Percussion & Bridge Relaunch Fills
     if (isCodaTail) {
         if (localStep == 20 || localStep == 24) {
             g_trackDrums.play_tone(92.0f, 34.0f, 0.70f, 0.02f, 130, gb_audio_track_tone::SINE);
@@ -440,7 +434,6 @@ static void stepMusicSequencer(uint32_t nowMs) {
     }
 }
 
-// Visceral Sword & Combat SFX
 static void sfxMenu(bool confirm) {
     if (g_sfxScale <= 0.01f) return;
     if (confirm) {
@@ -485,7 +478,630 @@ static void sfxGoblinLaugh() {
 }
 
 // ============================================================================
-// 2. PSRAM ASSET UNPACKER & FAST 320x240 BLITTER (WITH HORIZONTAL MIRRORING)
+// 2. COMPLETE 6-LANGUAGE LOCALIZATION PACK (FR, EN, PT, ES, IT, DE)
+//    Every line strictly <= 32 UTF-8 chars so ZERO text overflows 320x240!
+// ============================================================================
+
+enum LangId : uint8_t {
+    LANG_FR = 0,
+    LANG_EN = 1,
+    LANG_PT = 2,
+    LANG_ES = 3,
+    LANG_IT = 4,
+    LANG_DE = 5,
+    LANG_COUNT = 6
+};
+
+enum BannerId : uint8_t {
+    BNR_NONE = 0,
+    BNR_CLEAR_VANGUARD = 1,
+    BNR_WALL_BREACHED = 2,
+    BNR_ROUND_1 = 3,
+    BNR_NEXT_ROUND = 4,
+    BNR_PERFECT_PARRY = 5,
+    BNR_DECAPITATION = 6,
+    BNR_SKILL_WHIRLWIND = 7,
+    BNR_SKILL_ANVIL = 8,
+    BNR_SKILL_RIPOSTE = 9,
+    BNR_COUNT = 10
+};
+
+struct CutsceneShotText {
+    const char* title;
+    const char* line1;
+    const char* line2;
+};
+
+struct LocalePack {
+    const char* code;
+    const char* creditsTitle;
+    const char* titleMain;
+    const char* titleSub;
+    const char* titleItems[4];
+    const char* impactLabels[3];
+    const char* langRowLabel;
+    const char* titleFooter;
+    const char* quickTitle;
+    const char* quickFoeFmt;     // "< ... : %s >"
+    const char* stageNames[4];
+    const char* quickArenaFmt;   // "... : %s"
+    const char* quickFooter;
+    const char* cutsceneFooter;
+    const char* forgeTitle;
+    const char* forgeShardsFmt;
+    const char* forgeItems[3];   // <= 19 chars so "+ [Lv 3/3]" fits cleanly!
+    const char* forgeLvlTag;     // "Niv", "Lv", "Nv", "St"
+    const char* forgeMaxed;
+    const char* forgeCostFmt;
+    const char* forgeBoots1;     // <= 31 chars!
+    const char* forgeBoots2;     // <= 31 chars!
+    const char* forgeExit;
+    const char* guidePages[4][6]; // All <= 32 chars!
+    const char* guideFooter;
+    const char* hudPtsShardsFmt;
+    const char* hudPathClear;
+    const char* hudFoesFmt;
+    const char* skinNames[SKIN_COUNT];
+    const char* banners[BNR_COUNT];
+    CutsceneShotText cutscenes[9][2];
+};
+
+static const LocalePack LOCALES[LANG_COUNT] = {
+    // -------------------- 0: FRANCAIS (fr) --------------------
+    {
+        "fr",
+        "Krom : Le Glaive d'Acier",
+        "KROM : LE GLAIVE D'ACIER",
+        "EDITION GAMEBUINO AKA 320x240",
+        {
+            "CAMPAGNE (4 ACTES + BOSS)",
+            "DUEL D'ARENE RAPIDE",
+            "FORGE & BOTTES SECRETES (D)",
+            "GUIDE DE COMBAT & PARADES"
+        },
+        {"< IMPACT : SOFT (ECLATS) >", "< IMPACT : NORMAL >", "< IMPACT : GORE >"},
+        "< LANGUE : FRANCAIS >",
+        "A:Valider  D:Forge  MENU:Pause",
+        "DUEL D'ARENE RAPIDE",
+        "< ADVERSAIRE : %s >",
+        {"FORET CENDREE", "CRYPTE NOIRE", "ARENE SABLE", "SANCTUAIRE"},
+        "Haut/Bas Arene : %s",
+        "A:Combattre   B:Retour Titre",
+        "A:Suite  D:Forge  B/RUN:Passer",
+        "FORGE DU CAMPEMENT",
+        "Eclats d'Acier dispo : %d",
+        {"ACIER TREMPE (+4)", "HARNOIS NORD (+18)", "BOTTES SECRETES"},
+        "Niv",
+        "MAITRISE MAXIMALE",
+        "Cout: %d eclats (A:Forger)",
+        "Bottes: 1:R1+Av | 2:C+Haut",
+        "3:Parade L1->A (Riposte +12)",
+        "B / D : Quitter la Forge",
+        {
+            {"1/4 : COMMANDES DE BASE",
+             "Stick/DPad: Marche, Saut, Bas",
+             "A : Taille Vive / Estoc",
+             "B : Balayage Bas (fauche)",
+             "D : Roulade d'esquive",
+             "MENU : Pause, Langue, Loader"},
+            {"2/4 : ATTAQUES LOURDES",
+             "R1 : Fendoir Brise-Garde",
+             "C : Moulinet 360 Decapitant",
+             "-> Decapite un ennemi affaibli",
+             "-> Ennemi accroupi : esquive",
+             "   le moulinet haut !"},
+            {"3/4 : GARDE & PARADES",
+             "Maintenir L1 : Garde Haute",
+             "L1 juste a l'impact :",
+             "-> PARADE PARFAITE DOREE !",
+             "-> Etourdit l'ennemi + bonus",
+             "   de +12 degats au coup !"},
+            {"4/4 : FORGE & BOTTES",
+             "Gagnez des Eclats en combat.",
+             "Ouvrez la Forge (D ou RUN) :",
+             "Niv1 : R1+Avant Bris d'Enclume",
+             "Niv2 : C+Haut Tourbillon Nord",
+             "Niv3 : Parade L1->A Riposte"}
+        },
+        "Gauche/Droite:Page   B:Fermer",
+        "PTS %lu  ECLATS %d",
+        "VOIE LIBRE : BOSS >>",
+        "ENNEMIS:%d  RUN:Forge",
+        {"KROM", "RIVAL AKA", "GORGAR", "VORGATH", "MALAKOR", "SEIGNEUR DRAX",
+         "PILLARD", "SQUELETTE", "FAUVE", "GARDE NOIR"},
+        {"", "ELIMINEZ L'AVANT-GARDE !", "MUR FRANCHI : AVANCEZ !",
+         "MANCHE 1 - EN GARDE !", "MANCHE SUIVANTE !", "PARADE PARFAITE !",
+         "DECAPITATION !!", "TOURBILLON DU NORD !", "BRIS D'ENCLUME !", "RIPOSTE ECLAIR !"},
+        {
+            {{"ACTE I - CLAIRIERES CENDREES", "Les pillards brulent le Nord.", "Krom saisit le Glaive d'Acier."},
+             {"LA PISTE DE GORGAR", "Franchissez les murs et brisez", "la horde avant les menhirs !"}},
+            {{"GORGAR LE BRISEUR", "\"Ta tete ornera mon totem !\"", "Gare a son lourd fendoir."},
+             {"CERCLE DE PIERRE", "L1 a l'impact : Parade doree", "C au cou : Decapitation !"}},
+            {{"ACTE II - CRYPTES NOIRES", "Gorgar vaincu, Krom descend", "dans les geoles d'obsidienne."},
+             {"LES CATACOMBES", "Pressez D pour forger votre", "glaive avec vos eclats !"}},
+            {{"BOURREAU VORGATH", "Sa hache noire fauche tout.", "Esquivez d'une roulade (D) !"},
+             {"PONT DU BILLOT", "Sautez ses coups bas et", "frappez dans l'ouverture !"}},
+            {{"ACTE III - ARENE D'OS", "Les tambours grondent au", "colisee de sang et de sable !"},
+             {"MURS DU COLISEE", "Percez chaque muraille jusqu'a", "Malakor le champion invaincu !"}},
+            {{"CHAMPION MALAKOR", "Vif comme l'eclair d'arene.", "Variez vos coups pour percer !"},
+             {"SOUS LES CLAMEURS", "Une parade parfaite ouvre", "une riposte devastatrice !"}},
+            {{"ACTE IV - CITADELLE DRAX", "La garde noire defend l'autel", "sous la foudre pourpre."},
+             {"DERNIER REMPART", "Forgez vos armes (touche D)", "avant le Seigneur Drax !"}},
+            {{"SEIGNEUR SORCIER DRAX", "\"Nul mortel ne me vaincra !\"", "Son glaive runique flamboie."},
+             {"COMBAT ULTIME", "Toutes vos bottes secretes", "decideront du sort du Nord !"}},
+            {{"TRIOMPHE DE L'ACIER", "Drax tombe ! La tempete noire", "se dissipe sur le Nord libre."},
+             {"LEGENDE ETERNELLE", "Les bardes chantent KROM !", "Merci d'avoir joue sur AKA."}}
+        }
+    },
+
+    // -------------------- 1: ENGLISH (en) --------------------
+    {
+        "en",
+        "Krom: Blade of Steel",
+        "KROM: BLADE OF STEEL",
+        "GAMEBUINO AKA 320x240 EDITION",
+        {
+            "STORY CAMPAIGN (4 ACTS)",
+            "QUICK ARENA DUEL",
+            "FORGE & SECRET ARTS (D)",
+            "COMBAT & PARRY GUIDE"
+        },
+        {"< IMPACT: SOFT (SPARKS) >", "< IMPACT: NORMAL >", "< IMPACT: GORE >"},
+        "< LANGUAGE: ENGLISH >",
+        "A:Select  D:Forge  MENU:Pause",
+        "QUICK ARENA DUEL",
+        "< OPPONENT: %s >",
+        {"ASHEN FOREST", "DARK CRYPT", "BLOOD ARENA", "SANCTUARY"},
+        "Up/Down Stage: %s",
+        "A:Fight   B:Title Screen",
+        "A:Next  D:Forge  B/RUN:Skip",
+        "CAMPFIRE FORGE",
+        "Steel Shards owned: %d",
+        {"TEMPERED BLADE (+4)", "NORTH ARMOR (+18)", "SECRET SWORD ARTS"},
+        "Lv",
+        "MAXIMUM MASTERY",
+        "Cost: %d shards (A:Forge)",
+        "Arts: 1:R1+Fwd | 2:C+Up",
+        "3:Parry L1->A (Riposte +12)",
+        "B / D : Exit Forge",
+        {
+            {"1/4 : BASIC CONTROLS",
+             "Stick/DPad: Move, Jump, Duck",
+             "A : Quick Slash / Thrust",
+             "B : Low Sweep (trips guard)",
+             "D : Invincible Dodge Roll",
+             "MENU : Pause, Lang, Loader"},
+            {"2/4 : HEAVY STRIKES",
+             "R1 : Guard-Break Overhead",
+             "C : 360 Decapitating Spin",
+             "-> Beheads weakened foes!",
+             "-> Crouching foes duck under",
+             "   high spin slashes!"},
+            {"3/4 : GUARD & PARRY",
+             "Hold L1 : High Sword Guard",
+             "Tap L1 right on impact :",
+             "-> GOLDEN PERFECT PARRY!",
+             "-> Stuns attacker & boosts",
+             "   next strike (+12 damage)"},
+            {"4/4 : FORGE & SECRET ARTS",
+             "Earn Steel Shards in battle.",
+             "Open Forge with D or RUN :",
+             "Lv1 : R1+Fwd = Anvil Breaker",
+             "Lv2 : C+Up = North Whirlwind",
+             "Lv3 : Parry L1->A = Riposte"}
+        },
+        "Left/Right:Page   B:Close",
+        "PTS %lu  SHARDS %d",
+        "PATH CLEAR: BOSS >>",
+        "FOES:%d  RUN:Forge",
+        {"KROM", "AKA RIVAL", "GORGAR", "VORGATH", "MALAKOR", "LORD DRAX",
+         "RAIDER", "SKELETON", "PIT BEAST", "DARK GUARD"},
+        {"", "DEFEAT THE VANGUARD!", "WALL BREACHED: ADVANCE!",
+         "ROUND 1 - FIGHT!", "NEXT ROUND!", "PERFECT PARRY!",
+         "DECAPITATION!!", "NORTH WHIRLWIND!", "ANVIL BREAKER!", "FLASH RIPOSTE!"},
+        {
+            {{"ACT I - ASHEN GLADES", "Drax's raiders burn the North.", "Krom draws the Blade of Steel."},
+             {"GORGAR'S TRAIL", "Break through the stone walls", "before the menhir arena!"}},
+            {{"GORGAR THE BONEBREAKER", "\"Your skull joins my totem!\"", "Beware his heavy guard-crush."},
+             {"STONE CIRCLE DUEL", "L1 on impact: Golden Parry!", "C at neck: Decapitation!"}},
+            {{"ACT II - OBSIDIAN CRYPTS", "Past fallen Gorgar, Krom", "descends into magma dungeons."},
+             {"DARK CATACOMBS", "Press D at camp to temper", "your sword with shards!"}},
+            {{"EXECUTIONER VORGATH", "His black axe reaps all foes.", "Roll past his strikes with D!"},
+             {"THE CHOPPING BRIDGE", "Mix high and low strikes to", "shatter his iron defense!"}},
+            {{"ACT III - BONE COLISEUM", "War drums thunder beneath", "the scorching crimson sun!"},
+             {"ARENA BASTIONS", "Breach every arena wall to", "face unbeaten Malakor!"}},
+            {{"CHAMPION MALAKOR", "Swift master of the blood pit.", "Time your parries carefully!"},
+             {"ROAR OF THE CROWD", "A Perfect Parry opens a", "devastating counter-slash!"}},
+            {{"ACT IV - DRAX SANCTUARY", "Dark sentinels guard the bridge", "beneath purple lightning."},
+             {"FINAL ASCENT", "Spend your shards at Forge (D)", "before facing Lord Drax!"}},
+            {{"SORCERER-KING DRAX", "\"No mortal breaks my crown!\"", "His runic blade blazes dark."},
+             {"ULTIMATE DUEL", "Unleash every secret art to", "free the Northern realm!"}},
+            {{"TRIUMPH OF STEEL", "Drax falls! Dark storm clouds", "vanish over the free North."},
+             {"ETERNAL LEGEND", "Bards sing of mighty KROM!", "Thanks for playing on AKA."}}
+        }
+    },
+
+    // -------------------- 2: PORTUGUES (pt) --------------------
+    {
+        "pt",
+        "Krom: Espada de Aco",
+        "KROM: A ESPADA DE ACO",
+        "EDICAO GAMEBUINO AKA 320x240",
+        {
+            "CAMPANHA (4 ATOS + CHEFES)",
+            "DUELO RAPIDO DE ARENA",
+            "FORJA & TECNICAS (D)",
+            "GUIA DE GOLPES & DEFESA"
+        },
+        {"< IMPACTO: SOFT (FAISCAS) >", "< IMPACTO: NORMAL >", "< IMPACTO: GORE >"},
+        "< IDIOMA: PORTUGUES >",
+        "A:OK  D:Forja  MENU:Sistema",
+        "DUELO RAPIDO DE ARENA",
+        "< INIMIGO: %s >",
+        {"FLORESTA CINZA", "CRIPTA NEGRA", "ARENA SANGUE", "SANTUARIO"},
+        "Cima/Baixo Arena: %s",
+        "A:Lutar   B:Tela Inicial",
+        "A:Seguir  D:Forja  B/RUN:Pular",
+        "FORJA DO ACAMPAMENTO",
+        "Fragmentos de Aco: %d",
+        {"ACO TEMPERADO (+4)", "ARMADURA NORTE(+18)", "TECNICAS SECRETAS"},
+        "Nv",
+        "MAESTRIA MAXIMA",
+        "Custo: %d frag. (A:Forjar)",
+        "Tecn.: 1:R1+Frente | 2:C+Cima",
+        "3:Defesa L1->A (Riposte +12)",
+        "B / D : Sair da Forja",
+        {
+            {"1/4 : CONTROLES BASICOS",
+             "Stick/DPad: Andar, Pulo, Ag.",
+             "A : Corte Rapido / Estocada",
+             "B : Rasteira Baixa",
+             "D : Rolamento invencivel",
+             "MENU : Pausa, Idioma, Loader"},
+            {"2/4 : GOLPES PESADOS",
+             "R1 : Golpe Quebra-Guarda",
+             "C : Giro Decapitador 360",
+             "-> Decapita inimigo fraco!",
+             "-> Inimigo agachado escapa",
+             "   do giro alto!"},
+            {"3/4 : GUARDA & DEFESA",
+             "Segurar L1 : Guarda Alta",
+             "L1 bem no impacto :",
+             "-> DEFESA PERFEITA DOURADA!",
+             "-> Atordoa e da +12 de dano",
+             "   no proximo golpe!"},
+            {"4/4 : FORJA & TECNICAS",
+             "Ganhe Fragmentos lutando.",
+             "Abra a Forja com D ou RUN :",
+             "Nv1 : R1+Frente Quebra-Bigorna",
+             "Nv2 : C+Cima Turbilhao Norte",
+             "Nv3 : Defesa L1->A Riposte"}
+        },
+        "Esq/Dir:Pagina   B:Fechar",
+        "PTS %lu  FRAG %d",
+        "CAMINHO LIVRE: CHEFE >>",
+        "INIMIGOS:%d  RUN:Forja",
+        {"KROM", "RIVAL AKA", "GORGAR", "VORGATH", "MALAKOR", "SENHOR DRAX",
+         "SAQUEADOR", "ESQUELETO", "FERA", "GUARDA NEGRO"},
+        {"", "DERROTE A VANGUARDA!", "MURO VENCIDO: AVANCE!",
+         "ASSALTO 1 - LUTEM!", "PROXIMO ASSALTO!", "DEFESA PERFEITA!",
+         "DECAPITACAO!!", "TURBILHAO DO NORTE!", "QUEBRA-BIGORNA!", "RIPOSTE RELAMPAGO!"},
+        {
+            {{"ATO I - CLAREIRAS CINZAS", "Saqueadores queimam o Norte.", "Krom ergue a Espada de Aco."},
+             {"TRILHA DE GORGAR", "Cruze as muralhas e vencca", "a horda antes dos menires!"}},
+            {{"GORGAR QUEBRA-OSSOS", "\"Seu cranio sera meu trofeu!\"", "Cuidado com seu golpe pesado."},
+             {"CIRCULO DE PEDRA", "L1 no impacto: Defesa Perfeita", "C no pescoco: Decapitacao!"}},
+            {{"ATO II - CRIPTAS NEGRAS", "Gorgar cai; Krom desce as", "masmorras de obsidiana."},
+             {"AS CATACUMBAS", "Aperte D para forjar sua", "espada com seus fragmentos!"}},
+            {{"CARRASCO VORGATH", "Seu machado negro corta tudo.", "Role com D para esquivar!"},
+             {"PONTE DE LAVA", "Alterne golpes altos e baixos", "para abrir sua guarda!"}},
+            {{"ATO III - ARENA DE OSSOS", "Tambores ecoam sob o sol", "vermelho do grande coliseu!"},
+             {"MURALHAS DA ARENA", "Rompa os muros entre arenas", "ate o campeao Malakor!"}},
+            {{"CAMPEAO MALAKOR", "Veloz como um raio na areia.", "Domine o tempo da defesa!"},
+             {"SOB OS GRITOS", "Uma Defesa Perfeita abre um", "contra-ataque devastador!"}},
+            {{"ATO IV - SANTUARIO DRAX", "A guarda negra protege o altar", "sob raios purpuras."},
+             {"ULTIMA SUBIDA", "Use seus fragmentos na Forja", "antes de enfrentar Drax!"}},
+            {{"REI FEITICEIRO DRAX", "\"Nenhum mortal me vencera!\"", "Sua lamina runica queima."},
+             {"DUELO FINAL", "Use todas as tecnicas secretas", "para libertar o Norte!"}},
+            {{"TRIUNFO DO ACO", "Drax tomba! A tempestade", "some das terras do Norte."},
+             {"LENDA ETERNA", "Os bardos cantam o grande KROM", "Obrigado por jogar no AKA!"}}
+        }
+    },
+
+    // -------------------- 3: ESPANOL (es) --------------------
+    {
+        "es",
+        "Krom: Espada de Acero",
+        "KROM: LA ESPADA DE ACERO",
+        "EDICION GAMEBUINO AKA 320x240",
+        {
+            "CAMPANA (4 ACTOS + JEFES)",
+            "DUELO RAPIDO DE ARENA",
+            "FORJA Y TECNICAS (D)",
+            "GUIA DE GOLPES Y PARADAS"
+        },
+        {"< IMPACTO: SOFT (CHISPAS) >", "< IMPACTO: NORMAL >", "< IMPACTO: GORE >"},
+        "< IDIOMA: ESPANOL >",
+        "A:Aceptar  D:Forja  MENU:Pausa",
+        "DUELO RAPIDO DE ARENA",
+        "< RIVAL: %s >",
+        {"BOSQUE CENIZA", "CRIPTA NEGRA", "ARENA SANGRE", "SANTUARIO"},
+        "Arriba/Abajo Arena: %s",
+        "A:Luchar   B:Menu Inicial",
+        "A:Sigue  D:Forja  B/RUN:Saltar",
+        "FORJA DEL CAMPAMENTO",
+        "Esquirlas de Acero: %d",
+        {"ACERO TEMPLADO (+4)", "ARMADURA NORTE(+18)", "TECNICAS SECRETAS"},
+        "Nv",
+        "MAESTRIA MAXIMA",
+        "Costo: %d esq. (A:Forjar)",
+        "Tecn.: 1:R1+Adel. | 2:C+Arr.",
+        "3:Parada L1->A (Riposte +12)",
+        "B / D : Salir de la Forja",
+        {
+            {"1/4 : CONTROLES BASICOS",
+             "Stick/DPad: Mover, Salto, Ab.",
+             "A : Tajo Veloz / Estocada",
+             "B : Barrido Bajo",
+             "D : Rodar invencible",
+             "MENU : Pausa, Idioma, Loader"},
+            {"2/4 : ATAQUES PESADOS",
+             "R1 : Fendiente Rompeguardia",
+             "C : Giro Decapitador 360",
+             "-> Decapita al rival herido!",
+             "-> Agacharse esquiva el giro",
+             "   decapitador alto!"},
+            {"3/4 : GUARDIA Y PARADA",
+             "Mantener L1 : Guardia Alta",
+             "Pulsar L1 justo al impacto:",
+             "-> PARADA PERFECTA DORADA!",
+             "-> Aturde al rival y suma",
+             "   +12 dano al siguiente tajo"},
+            {"4/4 : FORJA Y TECNICAS",
+             "Gana Esquirlas combatiendo.",
+             "Abre la Forja con D o RUN :",
+             "Nv1 : R1+Adel. Rompeyunque",
+             "Nv2 : C+Arriba Torbellino",
+             "Nv3 : Parada L1->A Riposte"}
+        },
+        "Izq/Der:Pagina   B:Cerrar",
+        "PTS %lu  ESQ %d",
+        "PASO LIBRE: JEFE >>",
+        "ENEMIGOS:%d  RUN:Forja",
+        {"KROM", "RIVAL AKA", "GORGAR", "VORGATH", "MALAKOR", "SENOR DRAX",
+         "SAQUEADOR", "ESQUELETO", "FIERA", "GUARDIA NEGRO"},
+        {"", "ELIMINA LA VANGUARDIA!", "MURO ABIERTO: AVANZA!",
+         "RONDA 1 - EN GUARDIA!", "SIGUIENTE RONDA!", "PARADA PERFECTA!",
+         "DECAPITACION!!", "TORBELLINO DEL NORTE!", "ROMPEYUNQUE!", "RIPOSTE RELAMPAGO!"},
+        {
+            {{"ACTO I - CLAROS DE CENIZA", "Los saqueadores queman todo.", "Krom alza la Espada de Acero."},
+             {"SENDA DE GORGAR", "Cruza los muros de piedra y", "vence a la horda del Norte!"}},
+            {{"GORGAR ROMPEHUESOS", "\"Tu craneo ornara mi totem!\"", "Cuidado con su golpe pesado."},
+             {"CIRCULO DE PIEDRA", "L1 al impacto: Parada Dorada", "C al cuello: Decapitacion!"}},
+            {{"ACTO II - CRIPTAS NEGRAS", "Vencido Gorgar, Krom baja a", "las mazmorras de obsidiana."},
+             {"LAS CATACUMBAS", "Pulsa D para forjar tu hoja", "con esquirlas de acero!"}},
+            {{"VERDUGO VORGATH", "Su hacha negra todo lo siega.", "Rueda con D para esquivar!"},
+             {"PUENTE DE LAVA", "Alterna tajos altos y bajos", "para romper su defensa!"}},
+            {{"ACTO III - ARENA DE HUESOS", "Retumban tambores bajo el", "sol rojo del gran coliseo!"},
+             {"MUROS DEL COLISEO", "Supera cada muralla entre", "arenas hasta hallar Malakor!"}},
+            {{"CAMPEON MALAKOR", "Veloz maestro de la arena.", "Mide bien cada parada L1!"},
+             {"CLAMOR DEL COLISEO", "Una Parada Perfecta abre un", "contraataque demoledor!"}},
+            {{"ACTO IV - ALTAR DE DRAX", "La guardia negra protege el", "puente bajo rayos purpuras."},
+             {"ULTIMO BASTION", "Gasta tus esquirlas en Forja", "antes de retar a Lord Drax!"}},
+            {{"REY BRUJO DRAX", "\"Ningun mortal me vencera!\"", "Su espada runica arde oscura."},
+             {"DUELO SUPREMO", "Usa todas tus tecnicas para", "liberar las tierras del Norte!"}},
+            {{"TRIUNFO DEL ACERO", "Drax cae! La tormenta oscura", "se disipa sobre el Norte."},
+             {"LEYENDA ETERNA", "Los bardos cantan a KROM!", "Gracias por jugar en AKA."}}
+        }
+    },
+
+    // -------------------- 4: ITALIANO (it) --------------------
+    {
+        "it",
+        "Krom: Spada d'Acciaio",
+        "KROM: LA SPADA D'ACCIAIO",
+        "EDIZIONE GAMEBUINO AKA 320x240",
+        {
+            "CAMPAGNA (4 ATTI + BOSS)",
+            "DUELLO RAPIDO ARENA",
+            "FORGIA E TECNICHE (D)",
+            "GUIDA COLPI E PARATE"
+        },
+        {"< IMPATTO: SOFT (SCINTILLE) >", "< IMPATTO: NORMALE >", "< IMPATTO: GORE >"},
+        "< LINGUA: ITALIANO >",
+        "A:OK  D:Forgia  MENU:Pausa",
+        "DUELLO RAPIDO ARENA",
+        "< NEMICO: %s >",
+        {"FORESTA CENERE", "CRIPTA NERA", "ARENA SABBIA", "SANTUARIO"},
+        "Su/Giu Arena: %s",
+        "A:Combatti   B:Titolo",
+        "A:Avanti  D:Forgia  B/RUN:Salta",
+        "FORGIA DA CAMPO",
+        "Schegge d'Acciaio: %d",
+        {"ACCIAIO TEMPRATO(+4)", "CORAZZA NORD (+18)", "TECNICHE SEGRETE"},
+        "Lv",
+        "MAESTRIA MASSIMA",
+        "Costo: %d schegge (A:Forgia)",
+        "Tecn.: 1:R1+Avanti | 2:C+Su",
+        "3:Parata L1->A (Risposta +12)",
+        "B / D : Esci dalla Forgia",
+        {
+            {"1/4 : COMANDI DI BASE",
+             "Stick/DPad: Muovi, Salta, Giu",
+             "A : Fendente / Affondo",
+             "B : Spazzata Bassa",
+             "D : Capriola invincibile",
+             "MENU : Pausa, Lingua, Loader"},
+            {"2/4 : ATTACCHI PESANTI",
+             "R1 : Colpo Spezzaguardia",
+             "C : Giro Decapitante 360",
+             "-> Decapita il nemico ferito!",
+             "-> Chi si abbassa schiva il",
+             "   giro decapitante alto!"},
+            {"3/4 : GUARDIA E PARATA",
+             "Tieni L1 : Guardia Alta",
+             "Premi L1 giusto all'impatto:",
+             "-> PARATA PERFETTA DORATA!",
+             "-> Stordisce il nemico e da",
+             "   +12 danni al colpo dopo!"},
+            {"4/4 : FORGIA E TECNICHE",
+             "Ottieni Schegge in battaglia.",
+             "Apri la Forgia con D o RUN :",
+             "Lv1 : R1+Avanti Spezzincudine",
+             "Lv2 : C+Su Turbine del Nord",
+             "Lv3 : Parata L1->A Risposta"}
+        },
+        "Sin/Des:Pagina   B:Chiudi",
+        "PTS %lu  SCHEGGE %d",
+        "VIA LIBERA: BOSS >>",
+        "NEMICI:%d  RUN:Forgia",
+        {"KROM", "RIVALE AKA", "GORGAR", "VORGATH", "MALAKOR", "SIGNOR DRAX",
+         "PREDONE", "SCHELETRO", "BELVA", "GUARDIA NERA"},
+        {"", "ELIMINA L'AVANGUARDIA!", "MURO SUPERATO: AVANTI!",
+         "ROUND 1 - IN GUARDIA!", "PROSSIMO ROUND!", "PARATA PERFETTA!",
+         "DECAPITAZIONE!!", "TURBINE DEL NORD!", "SPEZZINCUDINE!", "RISPOSTA LAMPO!"},
+        {
+            {{"ATTO I - RADURE DI CENERE", "I predoni bruciano il Nord.", "Krom impugna la Spada."},
+             {"SENTIERO DI GORGAR", "Supera le mura di pietra fino", "al cerchio dei menhir!"}},
+            {{"GORGAR SPEZZAOSSA", "\"Il tuo teschio sara mio!\"", "Attento al colpo pesante."},
+             {"CERCHIO DI PIETRA", "L1 all'impatto: Parata d'Oro", "C al collo: Decapitazione!"}},
+            {{"ATTO II - CRIPTE NERE", "Sconfitto Gorgar, Krom scende", "nelle prigioni d'ossidiana."},
+             {"LE CATACOMBE", "Premi D per forgiare la lama", "con le schegge raccolte!"}},
+            {{"CARNEFICE VORGATH", "La sua scure nera falcia tutto", "Rotola con D per schivare!"},
+             {"PONTE DI LAVA", "Alterna colpi alti e bassi", "per spezzare la sua guardia!"}},
+            {{"ATTO III - ARENA D'OSSA", "I tamburi tuonano sotto il", "sole rosso del colosseo!"},
+             {"MURA DEL COLOSSEO", "Varca ogni muraglia tra le", "arene fino al grande Malakor!"}},
+            {{"CAMPIONE MALAKOR", "Rapido signore della sabbia.", "Calibra bene ogni parata!"},
+             {"URLO DELLA FOLLA", "Una Parata Perfetta apre un", "contrattacco devastante!"}},
+            {{"ATTO IV - SANTUARIO DRAX", "La guardia nera difende il", "ponte sotto lampi purpurei."},
+             {"ULTIMA ASCESA", "Usa le schegge alla Forgia", "prima di sfidare Lord Drax!"}},
+            {{"RE STREGONE DRAX", "\"Nessun mortale mi pieghera!\"", "La sua lama runica brucia."},
+             {"DUELLO FINALE", "Scatena le tecniche segrete", "per liberare tutto il Nord!"}},
+            {{"TRIONFO D'ACCIAIO", "Drax cade! La tempesta nera", "svanisce sulle terre libere."},
+             {"LEGGENDA ETERNA", "I bardi cantano il gran KROM!", "Grazie per aver giocato!"}}
+        }
+    },
+
+    // -------------------- 5: DEUTSCH (de) --------------------
+    {
+        "de",
+        "Krom: Klinge aus Stahl",
+        "KROM: KLINGE AUS STAHL",
+        "GAMEBUINO AKA 320x240 EDITION",
+        {
+            "KAMPAGNE (4 AKTE + BOSSE)",
+            "SCHNELLES ARENA-DUELL",
+            "SCHMIEDE & TECHNIKEN (D)",
+            "KAMPF- & PARADE-GUIDE"
+        },
+        {"< TREFFER: SOFT (FUNKEN) >", "< TREFFER: NORMAL >", "< TREFFER: GORE >"},
+        "< SPRACHE: DEUTSCH >",
+        "A:OK  D:Schmiede  MENU:Pause",
+        "SCHNELLES ARENA-DUELL",
+        "< GEGNER: %s >",
+        {"ASCHEWALD", "DUNKLE KRYPTA", "BLUTARENA", "HEILIGTUM"},
+        "Auf/Ab Arena: %s",
+        "A:Kampf   B:Titelbild",
+        "A:Weiter D:Schmiede B/RUN:Skip",
+        "LAGERSCHMIEDE",
+        "Stahlsplitter: %d",
+        {"HARTSTAHL (+4 Dmg)", "NORDPANZER (+18 LP)", "GEHEIMTECHNIKEN"},
+        "St",
+        "MEISTERSCHAFT MAX",
+        "Kosten: %d Spl. (A:Schmieden)",
+        "Techn.: 1:R1+Vor | 2:C+Auf",
+        "3:Parade L1->A (Konter +12)",
+        "B / D : Schmiede verlassen",
+        {
+            {"1/4 : GRUNDSTEUERUNG",
+             "Stick/DPad: Lauf, Sprung, Ab",
+             "A : Schneller Hieb / Stich",
+             "B : Tiefer Feger",
+             "D : Ausweichrolle",
+             "MENU : Pause, Sprache, Loader"},
+            {"2/4 : SCHWERE ANGRIFFE",
+             "R1 : Deckungsbrecher-Spalter",
+             "C : 360-Enthauptungswirbel",
+             "-> Enthauptet schwache Feinde",
+             "-> Geduckte Gegner meiden",
+             "   den hohen Wirbelhieb!"},
+            {"3/4 : DECKUNG & PARADE",
+             "L1 halten : Hohe Deckung",
+             "L1 genau beim Treffer :",
+             "-> GOLDENE PERFEKTE PARADE!",
+             "-> Betaubt Feind & gibt +12",
+             "   Schaden beim Konter!"},
+            {"4/4 : SCHMIEDE & TECHNIK",
+             "Sammle Splitter im Kampf.",
+             "Schmiede mit D oder RUN :",
+             "St1 : R1+Vor Ambossbrecher",
+             "St2 : C+Auf Nordwirbel",
+             "St3 : Parade L1->A Blitzkonter"}
+        },
+        "Links/Rechts:Seite   B:Zuruck",
+        "PKT %lu  SPL %d",
+        "WEG FREI: BOSS >>",
+        "FEINDE:%d  RUN:Schmiede",
+        {"KROM", "AKA-RIVALE", "GORGAR", "VORGATH", "MALAKOR", "FURST DRAX",
+         "PLUNDERER", "SKELETT", "BESTIE", "SCHATTENGARDE"},
+        {"", "BESIEGE DIE VORHUT!", "MAUER DURCHBROCHEN: WEITER!",
+         "RUNDE 1 - AUF DIE KLINGE!", "NACHSTE RUNDE!", "PERFEKTE PARADE!",
+         "ENTHAUPTUNG!!", "NORDWIRBEL!", "AMBOSSBRECHER!", "BLITZKONTER!"},
+        {
+            {{"AKT I - ASCHELICHTUNGEN", "Plunderer verbrennen den Nord.", "Krom zieht die Stahlklinge."},
+             {"GORGARS PFAD", "Durchbrich die Steinmauern", "vor dem Menhir-Steinkreis!"}},
+            {{"GORGAR KNOCHENBRECHER", "\"Dein Schadel ziert mein Mal!\"", "Vorsicht vor seinem Spalter!"},
+             {"DUELL AM STEINKREIS", "L1 beim Treffer: Goldparade!", "C am Hals: Enthauptung!"}},
+            {{"AKT II - OBSIDIANKRYPTA", "Gorgar fiel; Krom steigt in", "die Lavaverliese hinab."},
+             {"DIE KATAKOMBEN", "Drucke D, um dein Schwert", "mit Splittern zu hartet!"}},
+            {{"HENKER VORGATH", "Seine schwarze Axt maht alles.", "Rolle mit D durch Hiebe!"},
+             {"DIE BLUTBRUCKE", "Wechsle hohe und tiefe Hiebe,", "um seine Deckung zu brechen!"}},
+            {{"AKT III - KNOCHENARENA", "Kriegstrommeln dronen unter", "der blutroten Arenasomne!"},
+             {"ARENA-FESTUNGSMAUERN", "Erstürme jede Mauer zwischen", "den Arenen bis zu Malakor!"}},
+            {{"CHAMPION MALAKOR", "Blitzschneller Herr im Sand.", "Plane jede Parade prazise!"},
+             {"JUBEL DES KOLOSSEUMS", "Eine Perfekte Parade offnet", "einen vernichtenden Konter!"}},
+            {{"AKT IV - DRAX-HEILIGTUM", "Schattengarden schutzen den", "Altar im purpurnen Gewitter."},
+             {"LETZTER AUFSTIEG", "Nutze die Schmiede (Taste D)", "vor dem Kampf gegen Drax!"}},
+            {{"HEXENKONIG DRAX", "\"Kein Sterblicher bricht mich\"", "Seine Runenklinge lodert."},
+             {"ENDSCHLACHT", "Nutze alle Geheimtechniken,", "um den Norden zu befreien!"}},
+            {{"TRIUMPH DES STAHLS", "Drax fallt! Der dunkle Sturm", "weicht dem freien Morgenrot."},
+             {"EWIGE LEGENDE", "Barden besingen Held KROM!", "Danke fürs Spielen auf AKA!"}}
+        }
+    }
+};
+
+static LangId g_lastSyncedLang = LANG_COUNT;
+
+static LangId getLangId() {
+    const char* code = akaRuntime.getLanguage();
+    if (!code) return LANG_FR;
+    if (std::strcmp(code, "en") == 0) return LANG_EN;
+    if (std::strcmp(code, "pt") == 0) return LANG_PT;
+    if (std::strcmp(code, "es") == 0) return LANG_ES;
+    if (std::strcmp(code, "it") == 0) return LANG_IT;
+    if (std::strcmp(code, "de") == 0) return LANG_DE;
+    return LANG_FR;
+}
+
+static const LocalePack& loc() {
+    LangId id = getLangId();
+    if (id != g_lastSyncedLang) {
+        g_lastSyncedLang = id;
+        akaRuntime.setCredits(LOCALES[id].creditsTitle, "Studio Krom AKA", "MIT",
+                              "https://github.com");
+    }
+    return LOCALES[id];
+}
+
+static void cycleLanguage(int delta) {
+    int cur = static_cast<int>(getLangId());
+    int next = (cur + delta + static_cast<int>(LANG_COUNT)) % static_cast<int>(LANG_COUNT);
+    akaRuntime.setLanguage(LOCALES[next].code);
+    loc();
+}
+
+// ============================================================================
+// 3. PSRAM ASSET UNPACKER & MULTI-SEGMENT NON-LOOPING WORLD RENDERER
 // ============================================================================
 
 struct UnpackedSprite {
@@ -496,6 +1112,8 @@ struct UnpackedSprite {
 };
 
 static uint16_t* g_stageBuffers[4] = {nullptr, nullptr, nullptr, nullptr};
+static uint16_t* g_panoramaBuf = nullptr;
+static int g_loadedPanoramaAct = -1;
 static UnpackedSprite g_sprites[TOTAL_PACKED_SPRITES];
 
 static void* allocAssetRam(size_t bytes) {
@@ -504,34 +1122,59 @@ static void* allocAssetRam(size_t bytes) {
     return p;
 }
 
+static bool unpackStageLz256Into(const PackedStageAsset& asset, uint16_t* buf) {
+    if (!buf) return false;
+    const size_t totalPx = static_cast<size_t>(asset.w) * asset.h;
+    const uint16_t* pal = asset.palette256;
+    const uint8_t* lz = asset.lzIndices;
+    const uint32_t lzLen = asset.lzLen;
+    size_t outIdx = 0;
+    uint32_t rPos = 0;
+    while (rPos < lzLen && outIdx < totalPx) {
+        uint8_t tag = lz[rPos++];
+        if (tag < 0x80) {
+            uint32_t run = static_cast<uint32_t>(tag) + 1;
+            while (run-- && outIdx < totalPx && rPos < lzLen) {
+                buf[outIdx++] = pal[lz[rPos++]];
+            }
+        } else {
+            if (rPos >= lzLen) break;
+            uint32_t len = (static_cast<uint32_t>(tag - 0x80) >> 4) + 3;
+            uint32_t off = ((static_cast<uint32_t>(tag & 0x0F) << 8) | lz[rPos++]) + 1;
+            while (len-- && outIdx < totalPx) {
+                buf[outIdx] = (outIdx >= off) ? buf[outIdx - off] : pal[0];
+                outIdx++;
+            }
+        }
+    }
+    while (outIdx < totalPx) buf[outIdx++] = pal[0];
+    return true;
+}
+
+static uint16_t* unpackStageLz256Alloc(const PackedStageAsset& asset) {
+    const size_t totalPx = static_cast<size_t>(asset.w) * asset.h;
+    uint16_t* buf = static_cast<uint16_t*>(allocAssetRam(totalPx * sizeof(uint16_t)));
+    if (!buf) return nullptr;
+    unpackStageLz256Into(asset, buf);
+    return buf;
+}
+
+static void ensurePanoramaLoaded(int actIdx) {
+    const int idx = actIdx & 3;
+    if (!g_panoramaBuf) {
+        g_panoramaBuf = static_cast<uint16_t*>(allocAssetRam(2560 * 240 * sizeof(uint16_t)));
+    }
+    if (g_panoramaBuf && g_loadedPanoramaAct != idx) {
+        unpackStageLz256Into(PACKED_PANORAMAS[idx], g_panoramaBuf);
+        g_loadedPanoramaAct = idx;
+    }
+}
+
 static void unpackAllAssetsToPsram() {
     for (int s = 0; s < 4; ++s) {
-        constexpr size_t totalPx = 320 * 240;
-        uint16_t* buf = static_cast<uint16_t*>(allocAssetRam(totalPx * sizeof(uint16_t)));
-        const uint16_t* pal = PACKED_STAGES[s].palette256;
-        const uint8_t* rle = PACKED_STAGES[s].rleIndices;
-        const uint32_t rleLen = PACKED_STAGES[s].rleLen;
-        if (buf) {
-            size_t outIdx = 0;
-            uint32_t rPos = 0;
-            while (rPos < rleLen && outIdx < totalPx) {
-                uint8_t tag = rle[rPos++];
-                if (tag < 0x80) {
-                    uint32_t run = static_cast<uint32_t>(tag) + 1;
-                    if (rPos >= rleLen) break;
-                    uint16_t col = pal[rle[rPos++]];
-                    while (run-- && outIdx < totalPx) buf[outIdx++] = col;
-                } else {
-                    uint32_t run = static_cast<uint32_t>(tag - 0x80) + 1;
-                    while (run-- && outIdx < totalPx && rPos < rleLen) {
-                        buf[outIdx++] = pal[rle[rPos++]];
-                    }
-                }
-            }
-            while (outIdx < totalPx) buf[outIdx++] = pal[0];
-        }
-        g_stageBuffers[s] = buf;
+        g_stageBuffers[s] = unpackStageLz256Alloc(PACKED_STAGES[s]);
     }
+    ensurePanoramaLoaded(0);
 
     for (int id = 0; id < TOTAL_PACKED_SPRITES; ++id) {
         const PackedSpriteRle& src = PACKED_SPRITES[id];
@@ -586,7 +1229,21 @@ static void drawStageBackground(int stageIdx, int scrollX = 0) {
     }
 }
 
-// Blits unpacked sprite anchored at foot (footX, footY). Master sheets face RIGHT (facing = +1).
+// Seamless 2560x240 pixel-art panorama blit directly from PSRAM (zero runtime splicing or mirroring!)
+static void drawTraversalBackdrop1600(int actIdx, int camX) {
+    ensurePanoramaLoaded(actIdx);
+    if (!g_panoramaBuf) {
+        drawStageBackground(actIdx, camX);
+        return;
+    }
+    int cx = camX;
+    if (cx < 0) cx = 0;
+    if (cx > 2560 - 320) cx = 2560 - 320;
+    for (int y = 0; y < 240; ++y) {
+        std::memcpy(&framebuffer[y * 320], &g_panoramaBuf[y * 2560 + cx], 320 * sizeof(uint16_t));
+    }
+}
+
 static void drawSpriteAnchored(uint16_t spriteId, int footX, int footY, int facing, bool flashWhite = false) {
     if (spriteId >= TOTAL_PACKED_SPRITES) return;
     const UnpackedSprite& sp = g_sprites[spriteId];
@@ -614,29 +1271,65 @@ static void drawSpriteAnchored(uint16_t spriteId, int footX, int footY, int faci
     }
 }
 
-static inline void drawUtf8Text(int x, int y, const char* txt, uint16_t col, bool shadow = true) {
+static void drawSpriteTopAnchored(uint16_t spriteId, int topX, int topY, int facing = 1) {
+    if (spriteId >= TOTAL_PACKED_SPRITES) return;
+    const UnpackedSprite& sp = g_sprites[spriteId];
+    if (!sp.pixels) return;
+
+    const bool flipX = (facing < 0);
+    const int drawX = flipX ? (topX - (sp.w - sp.ax)) : (topX - sp.ax);
+    const int drawY = topY;
+
+    for (int dy = 0; dy < sp.h; ++dy) {
+        int py = drawY + dy;
+        if (py < 0 || py >= 240) continue;
+        const uint16_t* row = &sp.pixels[dy * sp.w];
+        uint16_t* dstRow = &framebuffer[py * 320];
+        for (int dx = 0; dx < sp.w; ++dx) {
+            int px = drawX + dx;
+            if (px < 0 || px >= 320) continue;
+            int sx = flipX ? (sp.w - 1 - dx) : dx;
+            uint16_t c = row[sx];
+            if (c != KROM_TRANSPARENT) {
+                dstRow[px] = c;
+            }
+        }
+    }
+}
+
+static inline void drawUtf8Clipped(int x, int y, int minX, int maxX, const char* txt, uint16_t col,
+                                   bool shadow = true) {
+    const int lo = (minX < 0) ? 0 : minX;
+    const int hi = (maxX > 320) ? 320 : maxX;
     if (shadow) {
         const uint16_t blk = lcd_color_rgb(6, 8, 12);
-        gb_text::draw_utf8(x + 1, y + 1, txt, [blk](int px, int py) {
-            if (static_cast<unsigned>(px) < 320u && static_cast<unsigned>(py) < 240u) {
+        gb_text::draw_utf8(x + 1, y + 1, txt, [blk, lo, hi](int px, int py) {
+            if (px >= lo && px < hi && static_cast<unsigned>(py) < 240u) {
                 framebuffer[py * 320 + px] = blk;
             }
         });
     }
-    gb_text::draw_utf8(x, y, txt, [col](int px, int py) {
-        if (static_cast<unsigned>(px) < 320u && static_cast<unsigned>(py) < 240u) {
+    gb_text::draw_utf8(x, y, txt, [col, lo, hi](int px, int py) {
+        if (px >= lo && px < hi && static_cast<unsigned>(py) < 240u) {
             framebuffer[py * 320 + px] = col;
         }
     });
 }
 
-static inline void drawUtf8Centered(int y, const char* txt, uint16_t col, bool shadow = true) {
+static inline void drawUtf8CenteredBox(int boxX, int boxW, int y, const char* txt, uint16_t col,
+                                       bool shadow = true) {
     int w = gb_text::utf8_width(txt);
-    drawUtf8Text((320 - w) / 2, y, txt, col, shadow);
+    int tx = boxX + (boxW - w) / 2;
+    if (tx < boxX + 4) tx = boxX + 4;
+    drawUtf8Clipped(tx, y, boxX + 3, boxX + boxW - 3, txt, col, shadow);
+}
+
+static inline void drawUtf8Centered(int y, const char* txt, uint16_t col, bool shadow = true) {
+    drawUtf8CenteredBox(2, 316, y, txt, col, shadow);
 }
 
 // ============================================================================
-// 3. GAME STATE, CUTSCENES, FORGE, GUIDE & SOFT/NORMAL/GORE IMPACT SYSTEM
+// 4. GAME STATE, EXTENDED 1600px WALL ZONES & DECOR ANIMATIONS
 // ============================================================================
 
 enum ImpactMode : uint8_t {
@@ -701,81 +1394,35 @@ struct FloorStain {
     uint16_t col;
 };
 
-struct CutsceneShot {
+struct CutsceneMetaShot {
     uint8_t stageIdx;
     SkinId leftSkin;
     SkinId rightSkin;
-    const char* title;
-    const char* line1;
-    const char* line2;
 };
 
-struct CutsceneDef {
-    CutsceneShot shots[2];
+struct CutsceneMeta {
+    CutsceneMetaShot shots[2];
     AppScreen nextScreen;
     uint8_t nextAct;
 };
 
-static const CutsceneDef CUTSCENES[9] = {
-    // 0: Intro Act 1
-    {{{0, SKIN_KROM, SKIN_RAIDER, "ACTE I - CLAIRIERES CENDREES",
-       "Les pillards de Drax brulent le Nord.", "Krom saisit le Glaive d'Acier."},
-      {0, SKIN_KROM, SKIN_GORGAR, "LA PISTE DE GORGAR",
-       "Traversez les bois embrases et brisez", "la horde avant l'arene des menhirs !"}},
-     SCR_TRAVERSAL, 0},
-    // 1: Boss 1 Gorgar
-    {{{0, SKIN_KROM, SKIN_GORGAR, "GORGAR LE BRiseur D'OS",
-       "\"Ta tete ornera mon totem, barbare !\"", "Attention a son fendoir brise-garde."},
-      {0, SKIN_KROM, SKIN_GORGAR, "DUEL AU CERCLE DE PIERRE",
-       "L1 au dernier instant : Parade Parfaite !", "C pres du cou : Moulinet Decapitant !"}},
-     SCR_DUEL, 0},
-    // 2: Intro Act 2
-    {{{1, SKIN_KROM, SKIN_SKELETON, "ACTE II - CRYPTES D'OBSIDIENNE",
-       "Gorgar terrasse, Krom descend sous terre.", "Les squelettes gardent les tombeaux."},
-      {1, SKIN_KROM, SKIN_VORGATH, "LES CATACOMBES",
-       "Astuce : pressez D au campement pour", "forger votre lame avec vos eclats !"}},
-     SCR_TRAVERSAL, 1},
-    // 3: Boss 2 Vorgath
-    {{{1, SKIN_KROM, SKIN_VORGATH, "BOURREAU VORGATH",
-       "Sa hache noire fauche tout sur son passage.", "Esquivez d'une roulade avec D !"},
-      {1, SKIN_KROM, SKIN_VORGATH, "CHAMBRE DES SUPPLICES",
-       "Punissez ses ouvertures par un estoc vif.", "Que l'acier chante dans l'ombre !"}},
-     SCR_DUEL, 1},
-    // 4: Intro Act 3
-    {{{2, SKIN_KROM, SKIN_PIT_BEAST, "ACTE III - ARENE DES OSSEMENTS",
-       "Les tambours grondent sous le soleil rouge.", "Les fauves de fosse bondissent !"},
-      {2, SKIN_KROM, SKIN_MALAKOR, "LE COLISEE SANGLANT",
-       "Frayez un chemin jusqu'au champion", "invaincu : Malakor le Flamboyant."}},
-     SCR_TRAVERSAL, 2},
-    // 5: Boss 3 Malakor
-    {{{2, SKIN_KROM, SKIN_MALAKOR, "CHAMPION MALAKOR",
-       "Rapide comme l'eclair, maitre de l'esquive.", "Balayez ses appuis avec B !"},
-      {2, SKIN_KROM, SKIN_MALAKOR, "SOUS LES CLAMEURS",
-       "Une parade parfaite dorée ouvre la voie", "a une riposte devastatrice !"}},
-     SCR_DUEL, 2},
-    // 6: Intro Act 4
-    {{{3, SKIN_KROM, SKIN_DARK_GUARD, "ACTE IV - SANCTUAIRE DE DRAX",
-       "La garde noire protege l'autel maudit.", "La foudre dechaine les cieux."},
-      {3, SKIN_KROM, SKIN_DRAX, "DERNIERE MONTEE",
-       "Utilisez vos eclats d'acier a la Forge (D)", "avant d'affronter le Seigneur Drax !"}},
-     SCR_TRAVERSAL, 3},
-    // 7: Boss 4 Seigneur Drax
-    {{{3, SKIN_KROM, SKIN_DRAX, "SEIGNEUR SORCIER DRAX",
-       "\"Nul mortel ne brise le pacte d'obsidienne !\"", "Son glaive runique frappe sans pitie."},
-      {3, SKIN_KROM, SKIN_DRAX, "COMBAT ULTIME",
-       "Toutes vos bottes secretes seront mises", "a l'epreuve. Tranchez le mal !"}},
-     SCR_DUEL, 3},
-    // 8: Victory Epilogue
-    {{{3, SKIN_KROM, SKIN_KROM, "TRIOMPHE DU GLAIVE D'ACIER",
-       "Drax s'effondre ! Le sortilege se dissipe", "sur les terres liberees du Nord."},
-      {0, SKIN_KROM, SKIN_KROM, "LEGENDE ETERNELLE",
-       "Les bardes chanteront le nom de KROM !", "Merci d'avoir joue sur Gamebuino AKA."}},
-     SCR_TITLE, 0}
+static const CutsceneMeta CUTSCENE_META[9] = {
+    {{{0, SKIN_KROM, SKIN_RAIDER},     {0, SKIN_KROM, SKIN_GORGAR}},  SCR_TRAVERSAL, 0},
+    {{{0, SKIN_KROM, SKIN_GORGAR},     {0, SKIN_KROM, SKIN_GORGAR}},  SCR_DUEL,      0},
+    {{{1, SKIN_KROM, SKIN_SKELETON},   {1, SKIN_KROM, SKIN_VORGATH}}, SCR_TRAVERSAL, 1},
+    {{{1, SKIN_KROM, SKIN_VORGATH},    {1, SKIN_KROM, SKIN_VORGATH}}, SCR_DUEL,      1},
+    {{{2, SKIN_KROM, SKIN_PIT_BEAST},  {2, SKIN_KROM, SKIN_MALAKOR}}, SCR_TRAVERSAL, 2},
+    {{{2, SKIN_KROM, SKIN_MALAKOR},    {2, SKIN_KROM, SKIN_MALAKOR}}, SCR_DUEL,      2},
+    {{{3, SKIN_KROM, SKIN_DARK_GUARD}, {3, SKIN_KROM, SKIN_DRAX}},    SCR_TRAVERSAL, 3},
+    {{{3, SKIN_KROM, SKIN_DRAX},       {3, SKIN_KROM, SKIN_DRAX}},    SCR_DUEL,      3},
+    {{{3, SKIN_KROM, SKIN_KROM},       {0, SKIN_KROM, SKIN_KROM}},    SCR_TITLE,     0}
 };
 
 static constexpr int GROUND_Y = 212;
+static constexpr float TRAVERSAL_WORLD_W = 2560.0f;
+static constexpr int MAX_MINIONS = 11;
 static constexpr int MAX_PARTICLES = 48;
-static constexpr int MAX_STAINS = 24;
+static constexpr int MAX_STAINS = 28;
 
 static AppScreen g_screen = SCR_TITLE;
 static ImpactMode g_impactMode = IMPACT_NORMAL;
@@ -791,25 +1438,27 @@ static bool g_isCampaign = true;
 static uint8_t g_actIdx = 0;
 static uint32_t g_score = 0;
 static int g_shards = 30;
-static uint8_t g_bladeLvl = 0;   // +damage
-static uint8_t g_armorLvl = 0;   // +maxHp
-static uint8_t g_secretLvl = 0;  // unlocks secret moves
+static uint8_t g_bladeLvl = 0;
+static uint8_t g_armorLvl = 0;
+static uint8_t g_secretLvl = 0;
 
 // Cutscene state
 static uint8_t g_cutsceneId = 0;
 static uint8_t g_cutsceneShot = 0;
 static uint32_t g_cutsceneTick = 0;
 
-// Traversal state
+// Traversal state (8 minions across 3 Arena Pockets separated by 2 Fortified Wall Zones!)
 struct MinionUnit {
     bool active;
+    uint8_t waveIdx; // 0: Arena 1 (x<620), 1: Arena 2 (x<1120), 2: Arena 3 (x<1560)
     Fighter f;
 };
 static float g_camX = 0.0f;
-static MinionUnit g_minions[6];
+static MinionUnit g_minions[MAX_MINIONS];
 static int g_minionsRemaining = 0;
+static uint8_t g_clearedWallStage = 0; // 0 -> 1 when Wave 0 cleared -> 2 when Wave 1 cleared
 
-// Duel state
+// Duel & anti-spam state
 static Fighter g_p1;
 static Fighter g_p2;
 static int g_p1Rounds = 0;
@@ -817,10 +1466,11 @@ static int g_p2Rounds = 0;
 static int g_roundEndTimer = 0;
 static int g_hitstop = 0;
 static int g_shake = 0;
-static const char* g_bannerMsg = "";
+static uint8_t g_playerSweepStreak = 0;
+static BannerId g_bannerId = BNR_NONE;
 static int g_bannerTimer = 0;
 
-// Severed head + Goblin cleaner!
+// Severed head + Goblin cleaner
 static bool g_headActive = false;
 static float g_headX = 0, g_headY = 0, g_headVx = 0, g_headVy = 0;
 static bool g_goblinActive = false;
@@ -844,12 +1494,11 @@ static void clearArenaFx() {
     g_goblinActive = false;
 }
 
-static void showBanner(const char* msg, int frames = 75) {
-    g_bannerMsg = msg;
+static void showBanner(BannerId id, int frames = 75) {
+    g_bannerId = id;
     g_bannerTimer = frames;
 }
 
-// Spawn localized impact particles right at the weapon contact coordinates!
 static void spawnWeaponImpact(float wx, float wy, int dir, bool heavy, bool parrySpark = false) {
     if (parrySpark || g_impactMode == IMPACT_SOFT) {
         int count = heavy ? 14 : 9;
@@ -914,39 +1563,212 @@ static void updateParticles() {
     }
 }
 
-static void drawAmbientStageLights(int stageIdx, int camOffX) {
-    // Flickering torches / embers / lightning runes per stage
-    const int flicker = (g_frameTick / 4) & 3;
+// ============================================================================
+// AUTHENTIC 16-BIT PIXEL-ART PORTCULLIS GATES & MULTI-LEVEL ANIMATED DECORS
+// ============================================================================
+
+static void drawPixelPortcullisGate(int gateWorldCenter, int camOffX, bool gateClosed) {
+    const int sx = gateWorldCenter - camOffX;
+    if (sx < -44 || sx > 364) return;
+    const uint16_t gateSprite = FX_PORTCULLIS_FRAMES[gateClosed ? 0 : 1];
+    drawSpriteAnchored(gateSprite, sx, GROUND_Y + 2, 1);
+}
+
+static void drawStageDecorAnimations(int stageIdx, int camOffX, bool isTraversal, bool crowdExcited) {
+    const uint32_t tick = g_frameTick;
+    const uint16_t torch0 = FX_TORCH_FRAMES[(tick / 5) % 6];
+    const uint16_t torch1 = FX_TORCH_FRAMES[(tick / 5 + 3) % 6];
+    const uint16_t braz0 = FX_BRAZIER_FRAMES[(tick / 6) % 4];
+    const uint16_t braz1 = FX_BRAZIER_FRAMES[(tick / 6 + 2) % 4];
+    const uint16_t mono0 = FX_MONO_FRAMES[(tick / 8) % 4];
+    const uint16_t crow0 = FX_CROW_FRAMES[(tick / 6) % 4];
+    const uint16_t crow1 = FX_CROW_FRAMES[(tick / 6 + 2) % 4];
+    const uint16_t banner0 = FX_BANNER_FRAMES[(tick / 8) % 4];
+    const uint16_t banner1 = FX_BANNER_FRAMES[(tick / 8 + 2) % 4];
+    const uint16_t cage0 = FX_CAGE_FRAMES[(tick / 10) % 4];
+    const uint16_t cage1 = FX_CAGE_FRAMES[(tick / 10 + 2) % 4];
+    const uint16_t arcBraz0 = FX_ARCANE_BRAZIER_FRAMES[(tick / 6) % 4];
+    const uint16_t arcBraz1 = FX_ARCANE_BRAZIER_FRAMES[(tick / 6 + 2) % 4];
+
     if (stageIdx == 0) {
-        // Forest floating fireflies / embers
+        // ACT 1 (FOREST): Rune monoliths near oak clearing & sanctuary, camp braziers, clan banners, crows & fireflies
+        if (isTraversal) {
+            const int monoWorld[2] = {1390, 2190};
+            for (int i = 0; i < 2; ++i) {
+                int sx = monoWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteAnchored(mono0, sx, GROUND_Y + 2, 1);
+            }
+            const int brazWorld[6] = {260, 740, 1140, 1610, 1980, 2380};
+            for (int i = 0; i < 6; ++i) {
+                int sx = brazWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteAnchored((i & 1) ? braz1 : braz0, sx, GROUND_Y + 2, 1);
+            }
+            const int bannerWorld[2] = {1120, 1945};
+            for (int i = 0; i < 2; ++i) {
+                int sx = bannerWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteTopAnchored((i & 1) ? banner1 : banner0, sx, 74, 1);
+            }
+        } else {
+            drawSpriteAnchored(mono0, 278, GROUND_Y + 2, -1);
+            drawSpriteAnchored(braz0, 36, GROUND_Y + 2, 1);
+        }
+
+        int cx1 = static_cast<int>((tick + 40) % 380) - 30;
+        int cx2 = 350 - static_cast<int>((tick * 2 / 3 + 160) % 380);
+        drawSpriteAnchored(crow0, cx1, 62 + static_cast<int>((tick / 12) & 3), 1);
+        drawSpriteAnchored(crow1, cx2, 80, -1);
+
         for (int i = 0; i < 8; ++i) {
-            int ex = ((i * 53 + static_cast<int>(g_frameTick) / 2 - camOffX / 2) % 320 + 320) % 320;
-            int ey = 60 + ((i * 37 + static_cast<int>(g_frameTick) / 3) % 120);
-            uint16_t c = (i & 1) ? lcd_color_rgb(255, 175, 55) : lcd_color_rgb(255, 110, 30);
-            gfx.setColor(c);
+            int ex = ((i * 53 + static_cast<int>(tick) / 2 - camOffX / 2) % 320 + 320) % 320;
+            int ey = 64 + ((i * 37 + static_cast<int>(tick) / 3) % 116);
+            gfx.setColor((i & 1) ? lcd_color_rgb(255, 205, 85) : lcd_color_rgb(155, 235, 195));
             gfx.fillRect(ex, ey, 2, 2);
         }
-    } else if (stageIdx == 1 || stageIdx == 2) {
-        // Crypt / Arena wall-torch warm glow halos
-        const int tx[2] = {68 - (camOffX % 60), 252 - (camOffX % 60)};
-        for (int t = 0; t < 2; ++t) {
-            if (tx[t] < 10 || tx[t] > 310) continue;
-            gfx.setColor(lcd_color_rgb(255, 150 + flicker * 20, 40));
-            gfx.fillCircle(tx[t], 86 - (flicker & 1), 3 + (flicker & 1));
-            gfx.setColor(lcd_color_rgb(255, 235, 140));
-            gfx.fillRect(tx[t] - 1, 85, 2, 2);
+    } else if (stageIdx == 1) {
+        // ACT 2 (CRYPT): Swaying iron cages, subterranean torches, braziers & lava embers (after dark grotto!)
+        if (isTraversal) {
+            const int cageWorld[5] = {480, 890, 1310, 1790, 2240};
+            for (int i = 0; i < 5; ++i) {
+                int sx = cageWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteTopAnchored((i & 1) ? cage1 : cage0, sx, 16, 1);
+            }
+            const int torchWorld[5] = {355, 760, 1180, 1610, 2080};
+            for (int i = 0; i < 5; ++i) {
+                int sx = torchWorld[i] - camOffX;
+                if (sx > -28 && sx < 348) drawSpriteAnchored((i & 1) ? torch1 : torch0, sx, 120, 1);
+            }
+            const int brazWorld[4] = {220, 1060, 1740, 2390};
+            for (int i = 0; i < 4; ++i) {
+                int sx = brazWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteAnchored((i & 1) ? braz1 : braz0, sx, GROUND_Y + 2, 1);
+            }
+        } else {
+            drawSpriteTopAnchored(cage0, 74, 22, 1);
+            drawSpriteTopAnchored(cage1, 246, 22, 1);
+            drawSpriteAnchored(torch0, 34, 124, 1);
+            drawSpriteAnchored(torch1, 108, 128, 1);
+            drawSpriteAnchored(torch0, 212, 128, -1);
+            drawSpriteAnchored(torch1, 286, 124, -1);
         }
-    } else if (stageIdx == 3) {
-        // Sanctuary arcane altar pulse
-        uint16_t runeCol = lcd_color_rgb(165 + flicker * 22, 60, 240);
-        gfx.setColor(runeCol);
-        gfx.drawFastHLine(136, 176 - (flicker & 1), 48);
+        if (!isTraversal || camOffX > 1320) {
+            const int emberCnt = (!isTraversal || camOffX > 1820) ? 8 : 4;
+            for (int i = 0; i < emberCnt; ++i) {
+                int ex = ((i * 47 + static_cast<int>(tick) / 3 - camOffX) % 320 + 320) % 320;
+                int ey = 186 - ((i * 29 + static_cast<int>(tick) / 2) % 118);
+                gfx.setColor((i & 1) ? lcd_color_rgb(255, 145, 45) : lcd_color_rgb(255, 215, 95));
+                gfx.fillRect(ex, ey, 1, 2);
+            }
+        }
+    } else if (stageIdx == 2) {
+        // ACT 3 (BONE COLISEUM): Dark cell cage, perimeter rampart banners & braziers, crows & cheering crowd!
+        if (isTraversal) {
+            int cageSx = 92 - camOffX;
+            if (cageSx > -32 && cageSx < 352) drawSpriteTopAnchored(cage0, cageSx, 18, 1);
+
+            const int bannerWorld[5] = {520, 1080, 1460, 1820, 2160};
+            for (int i = 0; i < 5; ++i) {
+                int sx = bannerWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteTopAnchored((i & 1) ? banner1 : banner0, sx, 52, 1);
+            }
+            const int brazPos[6] = {380, 780, 1240, 1640, 2040, 2410};
+            for (int i = 0; i < 6; ++i) {
+                int sx = brazPos[i] - camOffX;
+                if (sx > -32 && sx < 352) {
+                    drawSpriteAnchored((i & 1) ? braz1 : braz0, sx, GROUND_Y + 2, 1);
+                }
+            }
+        } else {
+            drawSpriteAnchored(braz0, 24, GROUND_Y + 2, 1);
+            drawSpriteAnchored(braz1, 296, GROUND_Y + 2, -1);
+            drawSpriteAnchored(torch0, 88, 122, 1);
+            drawSpriteAnchored(torch1, 232, 122, -1);
+            drawSpriteTopAnchored(banner0, 50, 84, 1);
+            drawSpriteTopAnchored(banner1, 270, 84, -1);
+        }
+
+        if (!isTraversal) {
+            for (int cx = 28; cx <= 104; cx += 14) {
+                bool cheer = crowdExcited ? (((tick / 4 + cx) & 1) != 0) : (((tick / 10 + cx) & 3) == 0);
+                if (cheer) {
+                    gfx.setColor(lcd_color_rgb(38, 22, 18));
+                    gfx.fillRect(cx, 104, 3, 4);
+                    gfx.fillRect(320 - cx, 104, 3, 4);
+                }
+            }
+        }
+
+        int crowX = static_cast<int>((tick * 3 / 4 + 90) % 380) - 30;
+        drawSpriteAnchored(crow0, crowX, 56, 1);
+
+        gfx.setColor(lcd_color_rgb(238, 198, 125));
+        for (int i = 0; i < 7; ++i) {
+            int sx = ((i * 51 + static_cast<int>(tick) * 2 - camOffX) % 320 + 320) % 320;
+            int sy = GROUND_Y + 4 + ((i * 7) % 20);
+            gfx.fillRect(sx, sy, 4, 1);
+        }
+    } else {
+        // ACT 4 (SANCTUARY): Cages, banners & violet braziers on ochre castle & black bridge (clear neutral ridge!)
+        if (isTraversal) {
+            const int cageWorld[4] = {340, 960, 1890, 2310};
+            for (int i = 0; i < 4; ++i) {
+                int sx = cageWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteTopAnchored((i & 1) ? cage1 : cage0, sx, 18, 1);
+            }
+            const int bannerWorld[4] = {430, 790, 1990, 2385};
+            for (int i = 0; i < 4; ++i) {
+                int sx = bannerWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) drawSpriteTopAnchored((i & 1) ? banner1 : banner0, sx, 74, 1);
+            }
+            const int brazWorld[6] = {245, 620, 985, 1875, 2180, 2440};
+            for (int i = 0; i < 6; ++i) {
+                int sx = brazWorld[i] - camOffX;
+                if (sx > -32 && sx < 352) {
+                    drawSpriteAnchored((i & 1) ? arcBraz1 : arcBraz0, sx, GROUND_Y + 2, 1);
+                }
+            }
+        } else {
+            drawSpriteTopAnchored(cage0, 58, 18, 1);
+            drawSpriteTopAnchored(cage1, 262, 18, 1);
+            drawSpriteAnchored(arcBraz0, 26, GROUND_Y + 2, 1);
+            drawSpriteAnchored(arcBraz1, 294, GROUND_Y + 2, -1);
+        }
+
+        gfx.setColor(lcd_color_rgb(155, 205, 245));
+        for (int i = 0; i < 16; ++i) {
+            int rx = ((i * 43 - static_cast<int>(tick) * 3 - camOffX / 2) % 320 + 320) % 320;
+            int ry = (i * 31 + static_cast<int>(tick) * 5) % (GROUND_Y + 4);
+            gfx.fillRect(rx, ry, 1, 4);
+        }
+        for (int r = 0; r < 4; ++r) {
+            int ph = (static_cast<int>(tick) + r * 9) & 15;
+            if (ph < 7) {
+                int rx = (r * 73 + (static_cast<int>(tick) / 16) * 29) % 296 + 12;
+                gfx.fillRect(rx - ph / 2, GROUND_Y + 3 + r * 4, 2 + ph, 1);
+            }
+        }
+
+        if ((tick % 180) < 4) {
+            int bx = 70 + static_cast<int>((tick * 17) % 180);
+            int by = 8;
+            gfx.setColor(lcd_color_rgb(235, 245, 255));
+            for (int seg = 0; seg < 7; ++seg) {
+                int nx = bx + (((seg * 13 + static_cast<int>(tick)) % 15) - 7);
+                gfx.fillRect(bx, by, 2, 10);
+                bx = nx;
+                by += 10;
+            }
+        }
+    }
+
+    // Authentic 16-bit spiked iron portcullis gates at the bastion thresholds & Boss Gate!
+    if (isTraversal) {
+        drawPixelPortcullisGate(838, camOffX, g_clearedWallStage < 1);
+        drawPixelPortcullisGate(1698, camOffX, g_clearedWallStage < 2);
+        drawPixelPortcullisGate(2530, camOffX, g_minionsRemaining > 0);
     }
 }
 
 static uint16_t getFighterSpriteId(const Fighter& f) {
-    // 0:IDLE0, 1:IDLE1, 2..5:WALK0..3, 6:ATK0, 7:ATK1, 8:CLEAVE, 9:SWEEP,
-    // 10:BLOCK, 11:CROUCH, 12:JUMP, 13:HIT, 14:DEAD0, 15:DEAD1, 16:DECAP0, 17:DECAP1, 18:VICTORY
     int slot = 0;
     switch (f.act) {
         case ACT_IDLE: slot = ((g_frameTick / 16) & 1) ? 1 : 0; break;
@@ -979,30 +1801,45 @@ static void startCutscene(uint8_t id) {
     g_cutsceneShot = 0;
     g_cutsceneTick = 0;
     g_screen = SCR_CUTSCENE;
-    uint8_t stg = CUTSCENES[id].shots[0].stageIdx;
+    uint8_t stg = CUTSCENE_META[id].shots[0].stageIdx;
     setMusicTrack(static_cast<MusicId>(MUS_FOREST + (stg & 3)));
 }
 
 static void startTraversal(uint8_t act) {
     g_actIdx = act & 3;
+    ensurePanoramaLoaded(g_actIdx);
     g_screen = SCR_TRAVERSAL;
     clearArenaFx();
     g_camX = 0.0f;
+    g_clearedWallStage = 0;
+    g_playerSweepStreak = 0;
     initFighter(g_p1, SKIN_KROM, 54.0f, 1, getKromMaxHp());
 
-    SkinId mSkin = SKIN_RAIDER;
-    int mHp = 28;
-    if (g_actIdx == 1) { mSkin = SKIN_SKELETON; mHp = 34; }
-    else if (g_actIdx == 2) { mSkin = SKIN_PIT_BEAST; mHp = 40; }
-    else if (g_actIdx == 3) { mSkin = SKIN_DARK_GUARD; mHp = 48; }
+    SkinId mSkinA = SKIN_RAIDER;
+    SkinId mSkinB = SKIN_SKELETON;
+    int mHp = 30;
+    if (g_actIdx == 0) { mSkinA = SKIN_RAIDER; mSkinB = SKIN_RAIDER; mHp = 28; }
+    else if (g_actIdx == 1) { mSkinA = SKIN_SKELETON; mSkinB = SKIN_RAIDER; mHp = 35; }
+    else if (g_actIdx == 2) { mSkinA = SKIN_PIT_BEAST; mSkinB = SKIN_SKELETON; mHp = 42; }
+    else { mSkinA = SKIN_DARK_GUARD; mSkinB = SKIN_PIT_BEAST; mHp = 50; }
 
-    g_minionsRemaining = 6;
-    for (int i = 0; i < 6; ++i) {
+    // 11 enemies placed across 3 long 2560px narrative zones separated by Portcullis Gates at x=838 & x=1698!
+    static const float SPAWN_X[MAX_MINIONS] = {
+        340.0f, 545.0f, 755.0f,
+        1060.0f, 1255.0f, 1445.0f, 1625.0f,
+        1920.0f, 2115.0f, 2305.0f, 2470.0f
+    };
+    static const uint8_t WAVE_IDX[MAX_MINIONS] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
+
+    g_minionsRemaining = MAX_MINIONS;
+    for (int i = 0; i < MAX_MINIONS; ++i) {
         g_minions[i].active = true;
-        initFighter(g_minions[i].f, mSkin, 195.0f + i * 118.0f, -1, mHp);
+        g_minions[i].waveIdx = WAVE_IDX[i];
+        SkinId sk = ((i % 3) == 1) ? mSkinB : mSkinA;
+        initFighter(g_minions[i].f, sk, SPAWN_X[i], -1, mHp + (WAVE_IDX[i] * 4));
     }
     setMusicTrack(static_cast<MusicId>(MUS_FOREST + g_actIdx));
-    showBanner("TRAVERSEE : ELIMINEZ L'AVANT-GARDE !", 75);
+    showBanner(BNR_CLEAR_VANGUARD, 75);
 }
 
 static void startDuel(SkinId enemySkin, uint8_t stageIdx, bool campaignDuel) {
@@ -1013,17 +1850,18 @@ static void startDuel(SkinId enemySkin, uint8_t stageIdx, bool campaignDuel) {
     g_p1Rounds = 0;
     g_p2Rounds = 0;
     g_roundEndTimer = 0;
+    g_playerSweepStreak = 0;
 
-    int enemyHp = 115 + g_actIdx * 20;
-    if (enemySkin == SKIN_DRAX) enemyHp = 185;
+    int enemyHp = 120 + g_actIdx * 22;
+    if (enemySkin == SKIN_DRAX) enemyHp = 190;
     initFighter(g_p1, SKIN_KROM, 92.0f, 1, getKromMaxHp());
     initFighter(g_p2, enemySkin, 228.0f, -1, enemyHp);
     setMusicTrack(static_cast<MusicId>(MUS_FOREST + g_actIdx));
-    showBanner("MANCHE 1 - EN GARDE !", 70);
+    showBanner(BNR_ROUND_1, 70);
 }
 
 // ============================================================================
-// 4. COMBAT MECHANICS (PLAYER INPUT, SECRET MOVES, PARRY, AI, DECAPITATION)
+// 5. COMBAT MECHANICS (ANTI-B-SPAM AI, SECRET MOVES, PARRY, DECAPITATION)
 // ============================================================================
 
 static inline bool justPressed(uint32_t mask) { return (g_keys.pressed & mask) != 0; }
@@ -1055,7 +1893,6 @@ static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
         }
     }
 
-    // Gravity
     if (p.y < GROUND_Y || p.vy != 0.0f) {
         p.y += p.vy;
         p.vy += 0.55f;
@@ -1073,7 +1910,6 @@ static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
         return;
     }
 
-    // L1 High Guard + Perfect Parry window on initial press
     if (g_keys.L1) {
         if (justPressed(EXPANDER_KEY_L1)) {
             p.parryWindow = 9;
@@ -1084,14 +1920,14 @@ static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
 
     const bool forwardHeld = (p.facing > 0) ? g_keys.right : g_keys.left;
 
-    // Attack inputs + Forge Secret Moves!
     if (justPressed(EXPANDER_KEY_C)) {
         p.act = ACT_SPIN_DECAP;
         p.timer = (g_secretLvl >= 2 && g_keys.up) ? 20 : 22;
         p.hitApplied = false;
+        g_playerSweepStreak = 0;
         if (g_secretLvl >= 2 && g_keys.up) {
             p.vy = -5.4f;
-            showBanner("BOTTE : TOURBILLON DU NORD !", 40);
+            showBanner(BNR_SKILL_WHIRLWIND, 40);
         }
         sfxSwing(true);
         return;
@@ -1100,9 +1936,10 @@ static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
         p.act = ACT_CLEAVE;
         p.timer = 19;
         p.hitApplied = false;
+        g_playerSweepStreak = 0;
         if (g_secretLvl >= 1 && forwardHeld) {
             p.x += p.facing * 14.0f;
-            showBanner("BOTTE : BRIS D'ENCLUME !", 40);
+            showBanner(BNR_SKILL_ANVIL, 40);
         }
         sfxSwing(true);
         return;
@@ -1111,16 +1948,18 @@ static void controlPlayerFighter(Fighter& p, float minX, float maxX) {
         p.act = ACT_SLASH;
         p.timer = 14;
         p.hitApplied = false;
+        if (g_playerSweepStreak > 0) g_playerSweepStreak--;
         if (p.riposteBuff > 0 && g_secretLvl >= 3) {
-            showBanner("RIPOSTE ECLAIR !", 40);
+            showBanner(BNR_SKILL_RIPOSTE, 40);
         }
         sfxSwing(false);
         return;
     }
     if (justPressed(EXPANDER_KEY_B)) {
         p.act = ACT_SWEEP;
-        p.timer = 15;
+        p.timer = 16;
         p.hitApplied = false;
+        if (g_playerSweepStreak < 8) g_playerSweepStreak++;
         sfxSwing(false);
         return;
     }
@@ -1167,12 +2006,12 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
     bool lowAttack = false;
     bool guardBreak = false;
     bool canDecap = false;
-    float contactHeight = 36.0f; // chest/shoulder height above ground
+    float contactHeight = 36.0f;
 
     if (atk.act == ACT_SLASH && atk.timer == 7) {
         inActiveFrame = true; reach = 50.0f; dmg = 14; contactHeight = 38.0f;
-    } else if (atk.act == ACT_SWEEP && atk.timer == 7) {
-        inActiveFrame = true; reach = 48.0f; dmg = 12; lowAttack = true; contactHeight = 14.0f;
+    } else if (atk.act == ACT_SWEEP && atk.timer == 8) {
+        inActiveFrame = true; reach = 48.0f; dmg = 11; lowAttack = true; contactHeight = 14.0f;
     } else if (atk.act == ACT_CLEAVE && atk.timer == 8) {
         inActiveFrame = true; reach = 54.0f; dmg = 24; guardBreak = true; contactHeight = 42.0f;
     } else if (atk.act == ACT_SPIN_DECAP && atk.timer == 9) {
@@ -1189,7 +2028,7 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
     }
 
     if (def.act == ACT_DEAD || def.act == ACT_DECAPITATED || def.act == ACT_ROLL) return;
-    if (lowAttack && def.y < GROUND_Y - 12.0f) return; // Jumped over low sweep!
+    if (lowAttack && def.y < GROUND_Y - 10.0f) return; // Jumped cleanly over low sweep!
     if (canDecap && def.act == ACT_CROUCH) return;     // Ducked under high spin!
 
     float dx = (def.x - atk.x) * atk.facing;
@@ -1199,7 +2038,6 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
     const float hitX = atk.x + atk.facing * (dx * 0.72f);
     const float hitY = def.y - contactHeight;
 
-    // Check High Guard & Perfect Parry
     if (def.act == ACT_BLOCK && !lowAttack && !guardBreak) {
         if (def.parryWindow > 0) {
             sfxClash(true);
@@ -1208,7 +2046,7 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
             atk.timer = 16;
             def.riposteBuff = 45;
             g_hitstop = 5;
-            showBanner("PARADE PARFAITE !", 45);
+            showBanner(BNR_PERFECT_PARRY, 45);
         } else {
             sfxClash(false);
             spawnWeaponImpact(hitX, hitY, -atk.facing, false, true);
@@ -1217,7 +2055,6 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
         return;
     }
 
-    // Instant Decapitation check (Barbarian 1987 iconic neck-chop!)
     const bool lethalOrVulnerable = (def.hp <= (isMinionTarget ? 28 : 48)) || (def.act == ACT_HIT);
     if (canDecap && lethalOrVulnerable && dx >= 22.0f && dx <= 52.0f) {
         def.hp = 0;
@@ -1236,7 +2073,7 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
                 g_headVx = atk.facing * 2.8f;
                 g_headVy = -5.2f;
             }
-            showBanner("DECAPITATION !!", 85);
+            showBanner(BNR_DECAPITATION, 85);
             if (&atk == &g_p1) { g_score += 500; g_shards += 18; }
         } else {
             g_score += 180;
@@ -1245,7 +2082,6 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
         return;
     }
 
-    // Standard / Heavy Blade Hit
     def.hp -= dmg;
     def.x += atk.facing * (guardBreak ? 10.0f : 6.0f);
     sfxHit(guardBreak || canDecap);
@@ -1272,17 +2108,41 @@ static void checkAttackHit(Fighter& atk, Fighter& def, bool isMinionTarget) {
 static void stepEnemyAi(Fighter& ai, const Fighter& target, int aggression, float minX, float maxX) {
     if (ai.hitFlash > 0) ai.hitFlash--;
     if (ai.parryWindow > 0) ai.parryWindow--;
+
+    // Full vertical gravity for AI jumps & knockbacks!
+    bool justLanded = false;
+    if (ai.y < GROUND_Y || ai.vy != 0.0f) {
+        ai.y += ai.vy;
+        ai.vy += 0.56f;
+        if (ai.act == ACT_JUMP) {
+            ai.x += ai.facing * 1.15f;
+        }
+        if (ai.y >= GROUND_Y) {
+            ai.y = GROUND_Y;
+            ai.vy = 0.0f;
+            justLanded = (ai.act == ACT_JUMP);
+        }
+    }
+
     if (ai.act == ACT_DEAD || ai.act == ACT_DECAPITATED || ai.act == ACT_VICTORY) {
         if (ai.timer > 0) ai.timer--;
-        if (ai.y < GROUND_Y || ai.vy != 0.0f) {
-            ai.y += ai.vy;
-            ai.vy += 0.55f;
-            if (ai.y >= GROUND_Y) {
-                ai.y = GROUND_Y;
-                ai.vy = 0.0f;
-            }
-        }
         return;
+    }
+
+    ai.facing = (target.x < ai.x) ? -1 : 1;
+    float dist = std::fabs(target.x - ai.x);
+
+    // Punish B-spam immediately upon landing from a sweep-evade jump!
+    if (justLanded) {
+        if (dist < 56.0f) {
+            ai.act = (aggression >= 2) ? ACT_CLEAVE : ACT_SLASH;
+            ai.timer = (ai.act == ACT_CLEAVE) ? 17 : 13;
+            ai.hitApplied = false;
+            sfxSwing(ai.act == ACT_CLEAVE);
+            return;
+        }
+        ai.act = ACT_IDLE;
+        ai.timer = 0;
     }
 
     if (ai.timer > 0) {
@@ -1296,28 +2156,52 @@ static void stepEnemyAi(Fighter& ai, const Fighter& target, int aggression, floa
         return;
     }
 
-    ai.facing = (target.x < ai.x) ? -1 : 1;
-    float dist = std::fabs(target.x - ai.x);
+    // Reactive anti-B-spam: jump over repeated low sweeps and counterattack!
+    if (target.act == ACT_SWEEP && target.timer >= 8 && dist < 66.0f && ai.y >= GROUND_Y) {
+        int jumpChance = (g_playerSweepStreak >= 2) ? (72 + aggression * 6) : (30 + aggression * 10);
+        if ((std::rand() % 100) < jumpChance) {
+            ai.vy = -6.3f;
+            ai.act = ACT_JUMP;
+            ai.timer = 18;
+            return;
+        }
+    }
+
+    // Reactive duck under telegraphed 360 decapitation spin!
+    if (target.act == ACT_SPIN_DECAP && target.timer >= 10 && dist < 62.0f && ai.y >= GROUND_Y) {
+        if ((std::rand() % 100) < (24 + aggression * 11)) {
+            ai.act = ACT_CROUCH;
+            ai.timer = 14;
+            return;
+        }
+    }
 
     if (dist > 46.0f) {
-        ai.x += ai.facing * (1.35f + aggression * 0.22f);
+        ai.x += ai.facing * (1.38f + aggression * 0.24f);
         ai.act = ACT_WALK;
     } else {
         int r = std::rand() % 100;
-        if ((target.act == ACT_SLASH || target.act == ACT_SPIN_DECAP) && r < 22 + aggression * 6) {
+        if ((target.act == ACT_SLASH || target.act == ACT_CLEAVE) && r < 24 + aggression * 7) {
             ai.act = ACT_BLOCK;
+            ai.parryWindow = (aggression >= 3 && (r & 1)) ? 6 : 0;
             ai.timer = 12;
-        } else if (r < 16 + aggression * 5) {
+        } else if (target.act == ACT_BLOCK && r < 30 + aggression * 8) {
+            // Punish passive turtling with a low sweep or guard-break cleave!
+            ai.act = (r & 1) ? ACT_SWEEP : ACT_CLEAVE;
+            ai.timer = 17;
+            ai.hitApplied = false;
+            sfxSwing(ai.act == ACT_CLEAVE);
+        } else if (r < 18 + aggression * 5) {
             ai.act = ACT_SLASH;
             ai.timer = 15;
             ai.hitApplied = false;
             sfxSwing(false);
-        } else if (r < 24 + aggression * 6) {
+        } else if (r < 28 + aggression * 6) {
             ai.act = (r & 1) ? ACT_SWEEP : ACT_CLEAVE;
             ai.timer = 18;
             ai.hitApplied = false;
             sfxSwing(ai.act == ACT_CLEAVE);
-        } else if (aggression >= 2 && r < 30 + aggression * 5) {
+        } else if (aggression >= 2 && r < 34 + aggression * 6) {
             ai.act = ACT_SPIN_DECAP;
             ai.timer = 22;
             ai.hitApplied = false;
@@ -1331,11 +2215,18 @@ static void stepEnemyAi(Fighter& ai, const Fighter& target, int aggression, floa
 }
 
 // ============================================================================
-// 5. SCREEN RENDERERS & STATE UPDATES
+// 6. SCREEN RENDERERS & FULLY LOCALIZED UI
 // ============================================================================
 
-static void drawHpBar(int x, int y, int w, int hp, int maxHp, const char* name, uint16_t fillCol) {
-    drawUtf8Text(x, y - 10, name, lcd_color_rgb(240, 232, 210));
+static void drawHpBar(int x, int y, int w, int hp, int maxHp, const char* name, uint16_t fillCol,
+                      bool rightAlignName = false) {
+    int nameX = x;
+    if (rightAlignName) {
+        int nw = gb_text::utf8_width(name);
+        nameX = x + w - nw;
+        if (nameX < x) nameX = x;
+    }
+    drawUtf8Clipped(nameX, y - 10, x, x + w + 2, name, lcd_color_rgb(240, 232, 210));
     gfx.setColor(lcd_color_rgb(20, 24, 32));
     gfx.fillRect(x, y, w, 7);
     int fw = (maxHp > 0) ? ((hp * (w - 2)) / maxHp) : 0;
@@ -1349,20 +2240,20 @@ static void drawHpBar(int x, int y, int w, int hp, int maxHp, const char* name, 
 }
 
 static void updateAndDrawTitle() {
-    static const char* ITEMS[5] = {
-        "CAMPAGNE SCENARISEE (4 ACTES)",
-        "DUEL D'ARENE RAPIDE",
-        "FORGE & BOTTES SECRETES (D)",
-        "GUIDE DE COMBAT & PARADES",
-        ""
-    };
-    if (justPressed(EXPANDER_KEY_UP)) { g_titleCursor = (g_titleCursor + 4) % 5; sfxMenu(false); }
-    if (justPressed(EXPANDER_KEY_DOWN)) { g_titleCursor = (g_titleCursor + 1) % 5; sfxMenu(false); }
+    loc();
+
+    if (justPressed(EXPANDER_KEY_UP)) { g_titleCursor = (g_titleCursor + 5) % 6; sfxMenu(false); }
+    if (justPressed(EXPANDER_KEY_DOWN)) { g_titleCursor = (g_titleCursor + 1) % 6; sfxMenu(false); }
+
     if (g_titleCursor == 4 && (justPressed(EXPANDER_KEY_LEFT) || justPressed(EXPANDER_KEY_RIGHT))) {
         int dir = justPressed(EXPANDER_KEY_RIGHT) ? 1 : 2;
         g_impactMode = static_cast<ImpactMode>((g_impactMode + dir) % 3);
         sfxMenu(false);
+    } else if (g_titleCursor == 5 && (justPressed(EXPANDER_KEY_LEFT) || justPressed(EXPANDER_KEY_RIGHT))) {
+        cycleLanguage(justPressed(EXPANDER_KEY_RIGHT) ? 1 : -1);
+        sfxMenu(true);
     }
+
     if (justPressed(EXPANDER_KEY_D)) {
         g_returnFromSubScreen = SCR_TITLE;
         g_screen = SCR_FORGE;
@@ -1387,50 +2278,54 @@ static void updateAndDrawTitle() {
             g_returnFromSubScreen = SCR_TITLE;
             g_screen = SCR_GUIDE;
             return;
-        } else {
+        } else if (g_titleCursor == 4) {
             g_impactMode = static_cast<ImpactMode>((g_impactMode + 1) % 3);
+        } else {
+            cycleLanguage(1);
         }
     }
 
+    const LocalePack& L2 = loc();
     drawStageBackground(3, 0);
-    drawAmbientStageLights(3, 0);
+    drawStageDecorAnimations(3, 0, false, false);
 
-    // Heroic showcase fighters on title screen
-    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_KROM][(g_frameTick / 20) & 1], 68, 218, 1);
-    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_DRAX][(g_frameTick / 20) & 1], 254, 218, -1);
+    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_KROM][(g_frameTick / 20) & 1], 56, 218, 1);
+    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_DRAX][(g_frameTick / 20) & 1], 266, 218, -1);
 
-    // Dark translucent title plaque
+    // Top title plaque
     gfx.setColor(lcd_color_rgb(10, 12, 18));
-    gfx.fillRect(22, 12, 276, 46);
+    gfx.fillRect(14, 8, 292, 42);
     gfx.setColor(lcd_color_rgb(235, 175, 55));
-    gfx.drawRect(22, 12, 276, 46);
-    drawUtf8Centered(20, "KROM : LE GLAIVE D'ACIER", lcd_color_rgb(255, 205, 70));
-    drawUtf8Centered(36, "EDITION GAMEBUINO AKA 320x240", lcd_color_rgb(195, 205, 220));
+    gfx.drawRect(14, 8, 292, 42);
+    drawUtf8CenteredBox(14, 292, 15, L2.titleMain, lcd_color_rgb(255, 205, 70));
+    drawUtf8CenteredBox(14, 292, 31, L2.titleSub, lcd_color_rgb(195, 205, 220));
 
+    // 6-row non-touch menu box (Campaign, Quick Duel, Forge, Guide, Impact, Language)
     gfx.setColor(lcd_color_rgb(12, 15, 22));
-    gfx.fillRect(24, 72, 272, 126);
+    gfx.fillRect(14, 56, 292, 154);
     gfx.setColor(lcd_color_rgb(120, 95, 45));
-    gfx.drawRect(24, 72, 272, 126);
+    gfx.drawRect(14, 56, 292, 154);
 
-    const char* impLabels[3] = {"IMPACT : SOFT (ETINCELLES)", "IMPACT : NORMAL", "IMPACT : GORE"};
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         const bool sel = (i == g_titleCursor);
-        int ry = 82 + i * 22;
+        int ry = 65 + i * 23;
         if (sel) {
             gfx.setColor(lcd_color_rgb(75, 48, 16));
-            gfx.fillRect(30, ry - 3, 260, 16);
+            gfx.fillRect(20, ry - 3, 280, 15);
         }
-        const char* label = (i == 4) ? impLabels[g_impactMode] : ITEMS[i];
-        drawUtf8Text(38, ry, label, sel ? lcd_color_rgb(255, 215, 90) : lcd_color_rgb(215, 220, 230));
+        const char* label = (i < 4) ? L2.titleItems[i]
+                                    : ((i == 4) ? L2.impactLabels[g_impactMode] : L2.langRowLabel);
+        uint16_t col = sel ? lcd_color_rgb(255, 215, 90)
+                           : ((i == 5) ? lcd_color_rgb(130, 225, 255) : lcd_color_rgb(215, 220, 230));
+        drawUtf8Clipped(26, ry, 20, 300, label, col);
     }
 
-    drawUtf8Centered(224, "A:Valider  D:Forge  MENU:Systeme AKA", lcd_color_rgb(180, 190, 205));
+    drawUtf8Centered(222, L2.titleFooter, lcd_color_rgb(180, 190, 205));
 }
 
 static void updateAndDrawQuickSelect() {
     static const SkinId ENEMIES[5] = {SKIN_RIVAL, SKIN_GORGAR, SKIN_VORGATH, SKIN_MALAKOR, SKIN_DRAX};
-    static const char* ENEMY_NAMES[5] = {"RIVAL AKA", "GORGAR", "VORGATH", "MALAKOR", "SEIGNEUR DRAX"};
-    static const char* STAGE_NAMES[4] = {"FORET CENDREE", "CRYPTE NOIRE", "ARENE SABLE", "SANCTUAIRE"};
+    const LocalePack& L = loc();
 
     if (justPressed(EXPANDER_KEY_LEFT)) { g_quickEnemyIdx = (g_quickEnemyIdx + 4) % 5; sfxMenu(false); }
     if (justPressed(EXPANDER_KEY_RIGHT)) { g_quickEnemyIdx = (g_quickEnemyIdx + 1) % 5; sfxMenu(false); }
@@ -1450,29 +2345,37 @@ static void updateAndDrawQuickSelect() {
     }
 
     drawStageBackground(g_quickStage, 0);
+    drawStageDecorAnimations(g_quickStage, 0, false, false);
+
     gfx.setColor(lcd_color_rgb(10, 12, 18));
-    gfx.fillRect(20, 14, 280, 44);
+    gfx.fillRect(14, 12, 292, 46);
     gfx.setColor(lcd_color_rgb(225, 170, 55));
-    gfx.drawRect(20, 14, 280, 44);
-    drawUtf8Centered(22, "DUEL D'ARENE RAPIDE", lcd_color_rgb(255, 205, 75));
-    char buf[48];
-    std::snprintf(buf, sizeof(buf), "< ADVERSAIRE : %s >", ENEMY_NAMES[g_quickEnemyIdx]);
-    drawUtf8Centered(38, buf, lcd_color_rgb(235, 240, 248));
+    gfx.drawRect(14, 12, 292, 46);
+    drawUtf8CenteredBox(14, 292, 20, L.quickTitle, lcd_color_rgb(255, 205, 75));
 
-    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_KROM][0], 95, 204, 1);
-    drawSpriteAnchored(SKIN_ANIM_FRAMES[ENEMIES[g_quickEnemyIdx]][0], 225, 204, -1);
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), L.quickFoeFmt, L.skinNames[ENEMIES[g_quickEnemyIdx]]);
+    drawUtf8CenteredBox(14, 292, 36, buf, lcd_color_rgb(235, 240, 248));
 
-    std::snprintf(buf, sizeof(buf), "Haut/Bas Arene : %s", STAGE_NAMES[g_quickStage]);
-    drawUtf8Centered(212, buf, lcd_color_rgb(255, 205, 85));
-    drawUtf8Centered(226, "A:Combattre   B:Retour Titre", lcd_color_rgb(185, 195, 210));
+    drawSpriteAnchored(SKIN_ANIM_FRAMES[SKIN_KROM][0], 95, 200, 1);
+    drawSpriteAnchored(SKIN_ANIM_FRAMES[ENEMIES[g_quickEnemyIdx]][0], 225, 200, -1);
+
+    gfx.setColor(lcd_color_rgb(10, 12, 18));
+    gfx.fillRect(14, 204, 292, 30);
+    gfx.setColor(lcd_color_rgb(140, 110, 48));
+    gfx.drawRect(14, 204, 292, 30);
+    std::snprintf(buf, sizeof(buf), L.quickArenaFmt, L.stageNames[g_quickStage]);
+    drawUtf8CenteredBox(14, 292, 209, buf, lcd_color_rgb(255, 205, 85));
+    drawUtf8CenteredBox(14, 292, 222, L.quickFooter, lcd_color_rgb(185, 195, 210));
 }
 
 static void updateAndDrawCutscene() {
     g_cutsceneTick++;
-    const CutsceneDef& cs = CUTSCENES[g_cutsceneId];
-    const CutsceneShot& sh = cs.shots[g_cutsceneShot];
+    const CutsceneMeta& cs = CUTSCENE_META[g_cutsceneId];
+    const CutsceneMetaShot& sh = cs.shots[g_cutsceneShot];
+    const LocalePack& L = loc();
+    const CutsceneShotText& tx = L.cutscenes[g_cutsceneId][g_cutsceneShot];
 
-    // B or RUN skips the entire cutscene immediately!
     if (justPressed(EXPANDER_KEY_B) || justPressed(EXPANDER_KEY_RUN)) {
         sfxMenu(true);
         if (cs.nextScreen == SCR_TRAVERSAL) startTraversal(cs.nextAct);
@@ -1511,13 +2414,12 @@ static void updateAndDrawCutscene() {
     }
 
     drawStageBackground(sh.stageIdx, static_cast<int>(g_cutsceneTick / 3));
-    drawAmbientStageLights(sh.stageIdx, 0);
-    drawSpriteAnchored(SKIN_ANIM_FRAMES[sh.leftSkin][(g_frameTick / 16) & 1], 92, 186, 1);
+    drawStageDecorAnimations(sh.stageIdx, 0, false, true);
+    drawSpriteAnchored(SKIN_ANIM_FRAMES[sh.leftSkin][(g_frameTick / 16) & 1], 92, 184, 1);
     if (g_cutsceneId != 8) {
-        drawSpriteAnchored(SKIN_ANIM_FRAMES[sh.rightSkin][(g_frameTick / 16) & 1], 228, 186, -1);
+        drawSpriteAnchored(SKIN_ANIM_FRAMES[sh.rightSkin][(g_frameTick / 16) & 1], 228, 184, -1);
     }
 
-    // Widescreen 16-bit cinema bars
     gfx.setColor(lcd_color_rgb(8, 10, 14));
     gfx.fillRect(0, 0, 320, 30);
     gfx.fillRect(0, 184, 320, 56);
@@ -1525,13 +2427,15 @@ static void updateAndDrawCutscene() {
     gfx.drawFastHLine(0, 30, 320);
     gfx.drawFastHLine(0, 184, 320);
 
-    drawUtf8Centered(10, sh.title, lcd_color_rgb(255, 205, 75));
-    drawUtf8Centered(192, sh.line1, lcd_color_rgb(235, 240, 248));
-    drawUtf8Centered(206, sh.line2, lcd_color_rgb(215, 225, 238));
-    drawUtf8Centered(224, "A:Suite   D:Forge   B/RUN:Passer", lcd_color_rgb(175, 185, 200));
+    drawUtf8CenteredBox(4, 312, 10, tx.title, lcd_color_rgb(255, 205, 75));
+    drawUtf8CenteredBox(4, 312, 192, tx.line1, lcd_color_rgb(235, 240, 248));
+    drawUtf8CenteredBox(4, 312, 206, tx.line2, lcd_color_rgb(215, 225, 238));
+    drawUtf8CenteredBox(4, 312, 224, L.cutsceneFooter, lcd_color_rgb(175, 185, 200));
 }
 
 static void updateAndDrawForge() {
+    const LocalePack& L = loc();
+
     if (justPressed(EXPANDER_KEY_UP)) { g_forgeCursor = (g_forgeCursor + 2) % 3; sfxMenu(false); }
     if (justPressed(EXPANDER_KEY_DOWN)) { g_forgeCursor = (g_forgeCursor + 1) % 3; sfxMenu(false); }
     if (justPressed(EXPANDER_KEY_B) || justPressed(EXPANDER_KEY_C) || justPressed(EXPANDER_KEY_D)) {
@@ -1555,35 +2459,40 @@ static void updateAndDrawForge() {
 
     drawStageBackground(0, 0);
     gfx.setColor(lcd_color_rgb(12, 14, 20));
-    gfx.fillRect(14, 14, 292, 212);
+    gfx.fillRect(8, 10, 304, 220);
     gfx.setColor(lcd_color_rgb(230, 165, 50));
-    gfx.drawRect(14, 14, 292, 212);
+    gfx.drawRect(8, 10, 304, 220);
 
-    char buf[52];
-    drawUtf8Centered(24, "FORGE DU CAMPEMENT", lcd_color_rgb(255, 205, 75));
-    std::snprintf(buf, sizeof(buf), "Eclats d'Acier disponibles : %d", g_shards);
-    drawUtf8Centered(42, buf, lcd_color_rgb(130, 225, 255));
+    char buf[64];
+    drawUtf8CenteredBox(8, 304, 18, L.forgeTitle, lcd_color_rgb(255, 205, 75));
+    std::snprintf(buf, sizeof(buf), L.forgeShardsFmt, g_shards);
+    drawUtf8CenteredBox(8, 304, 34, buf, lcd_color_rgb(130, 225, 255));
 
-    const char* titles[3] = {"ACIER TREMPE (+4 Degats)", "HARNOIS NORDIQUE (+18 PV)", "BOTTES SECRETES"};
     uint8_t lvls[3] = {g_bladeLvl, g_armorLvl, g_secretLvl};
     for (int i = 0; i < 3; ++i) {
-        int ry = 68 + i * 38;
+        int ry = 56 + i * 38;
         if (g_forgeCursor == i) {
             gfx.setColor(lcd_color_rgb(70, 44, 14));
-            gfx.fillRect(22, ry - 4, 276, 30);
+            gfx.fillRect(14, ry - 4, 292, 30);
         }
-        std::snprintf(buf, sizeof(buf), "%s [Niv %d/3]", titles[i], lvls[i]);
-        drawUtf8Text(28, ry, buf, lcd_color_rgb(255, 220, 120));
-        if (lvls[i] >= 3) std::snprintf(buf, sizeof(buf), "MAITRISE MAXIMALE");
-        else std::snprintf(buf, sizeof(buf), "Cout : %d eclats (A pour forger)", cost[i]);
-        drawUtf8Text(28, ry + 13, buf, lcd_color_rgb(200, 210, 225));
+        std::snprintf(buf, sizeof(buf), "%s [%s %d/3]", L.forgeItems[i], L.forgeLvlTag, lvls[i]);
+        drawUtf8Clipped(18, ry, 14, 306, buf, lcd_color_rgb(255, 220, 120));
+        if (lvls[i] >= 3) std::snprintf(buf, sizeof(buf), "%s", L.forgeMaxed);
+        else std::snprintf(buf, sizeof(buf), L.forgeCostFmt, cost[i]);
+        drawUtf8Clipped(18, ry + 13, 14, 306, buf, lcd_color_rgb(200, 210, 225));
     }
 
-    drawUtf8Centered(190, "Bottes : R1+Av | C+Haut | L1 Parfaite->A", lcd_color_rgb(225, 185, 95));
-    drawUtf8Centered(208, "B / D : Quitter la Forge", lcd_color_rgb(180, 190, 205));
+    // Two clean, centered lines for Secret Boots so ZERO characters overflow!
+    gfx.setColor(lcd_color_rgb(22, 26, 36));
+    gfx.fillRect(14, 172, 292, 30);
+    drawUtf8CenteredBox(14, 292, 175, L.forgeBoots1, lcd_color_rgb(235, 195, 95));
+    drawUtf8CenteredBox(14, 292, 189, L.forgeBoots2, lcd_color_rgb(195, 225, 245));
+    drawUtf8CenteredBox(8, 304, 212, L.forgeExit, lcd_color_rgb(180, 190, 205));
 }
 
 static void updateAndDrawGuide() {
+    const LocalePack& L = loc();
+
     if (justPressed(EXPANDER_KEY_LEFT)) { g_guidePage = (g_guidePage + 3) & 3; sfxMenu(false); }
     if (justPressed(EXPANDER_KEY_RIGHT) || justPressed(EXPANDER_KEY_A)) {
         g_guidePage = (g_guidePage + 1) & 3; sfxMenu(false);
@@ -1594,43 +2503,19 @@ static void updateAndDrawGuide() {
 
     gfx.clear(lcd_color_rgb(12, 15, 22));
     gfx.setColor(lcd_color_rgb(225, 170, 55));
-    gfx.drawRect(10, 10, 300, 220);
+    gfx.drawRect(8, 10, 304, 220);
 
-    static const char* PAGES[4][6] = {
-        {"GUIDE 1/4 : COMMANDES DE BASE",
-         "Stick / Croix : Marche, Saut, Accroupi",
-         "A : Taille Vive / Estoc rapide",
-         "B : Balayage Bas (touche sous la garde)",
-         "D : Roulade d'esquive invulnerable",
-         "MENU : Pause, Volumes, 6 Langues, Loader"},
-        {"GUIDE 2/4 : ATTAQUES LOURDES",
-         "R1 : Fendant Brise-Garde (brise L1 !)",
-         "C : Moulinet Decapitant 360 degres",
-         "-> Decapite net un ennemi affaibli !",
-         "-> Attention : un ennemi accroupi",
-         "   esquive le moulinet haut !"},
-        {"GUIDE 3/4 : GARDE & PARADE PARFAITE",
-         "Maintenir L1 : Garde Haute standard",
-         "Presser L1 juste a l'impact :",
-         "-> PARADE PARFAITE DOREE !",
-         "-> Etourdit l'adversaire et charge",
-         "   votre prochaine attaque (+12 degats)"},
-        {"GUIDE 4/4 : FORGE & BOTTES SECRETES",
-         "Ramassez des Eclats d'Acier en combat.",
-         "Ouvrez la Forge avec D sur la carte :",
-         "Niv 1 : R1 + Avant = Bris d'Enclume",
-         "Niv 2 : C + Haut = Tourbillon Bondissant",
-         "Niv 3 : Parade Parfaite -> A = Riposte"}
-    };
-
-    drawUtf8Centered(24, PAGES[g_guidePage][0], lcd_color_rgb(255, 205, 75));
+    drawUtf8CenteredBox(8, 304, 22, L.guidePages[g_guidePage][0], lcd_color_rgb(255, 205, 75));
     for (int l = 1; l < 6; ++l) {
-        drawUtf8Text(22, 52 + (l - 1) * 26, PAGES[g_guidePage][l], lcd_color_rgb(225, 232, 242));
+        drawUtf8Clipped(18, 50 + (l - 1) * 26, 12, 308, L.guidePages[g_guidePage][l],
+                        lcd_color_rgb(225, 232, 242));
     }
-    drawUtf8Centered(208, "Gauche/Droite : Page   B : Fermer", lcd_color_rgb(180, 195, 215));
+    drawUtf8CenteredBox(8, 304, 208, L.guideFooter, lcd_color_rgb(180, 195, 215));
 }
 
 static void updateAndDrawTraversal() {
+    const LocalePack& L = loc();
+
     if (justPressed(EXPANDER_KEY_RUN)) {
         g_returnFromSubScreen = SCR_TRAVERSAL;
         g_screen = SCR_FORGE;
@@ -1641,14 +2526,42 @@ static void updateAndDrawTraversal() {
     if (g_hitstop > 0) {
         g_hitstop--;
     } else {
-        controlPlayerFighter(g_p1, g_camX + 24.0f, 920.0f);
-        if (g_p1.x - g_camX > 150.0f && g_camX < 640.0f) {
-            g_camX = g_p1.x - 150.0f;
-            if (g_camX > 640.0f) g_camX = 640.0f;
+        // Compute wave gate lock at the fortified inter-arena masonry walls!
+        int waveAlive[3] = {0, 0, 0};
+        for (int i = 0; i < MAX_MINIONS; ++i) {
+            const MinionUnit& m = g_minions[i];
+            if (!m.active) continue;
+            if (m.f.act != ACT_DEAD && m.f.act != ACT_DECAPITATED) {
+                waveAlive[m.waveIdx & 3]++;
+            }
         }
 
-        int alive = 0;
-        for (int i = 0; i < 6; ++i) {
+        if (g_clearedWallStage == 0 && waveAlive[0] == 0) {
+            g_clearedWallStage = 1;
+            sfxClash(true);
+            showBanner(BNR_WALL_BREACHED, 65);
+        } else if (g_clearedWallStage == 1 && waveAlive[1] == 0) {
+            g_clearedWallStage = 2;
+            sfxClash(true);
+            showBanner(BNR_WALL_BREACHED, 65);
+        }
+
+        float maxWalkX = TRAVERSAL_WORLD_W - 28.0f;
+        if (waveAlive[0] > 0) maxWalkX = 820.0f;        // Locked before Portcullis Gate 1 (x=838)
+        else if (waveAlive[1] > 0) maxWalkX = 1680.0f;  // Locked before Portcullis Gate 2 (x=1698)
+
+        controlPlayerFighter(g_p1, g_camX + 22.0f, maxWalkX);
+
+        float maxCamX = maxWalkX - 280.0f;
+        if (maxCamX < 0.0f) maxCamX = 0.0f;
+        if (maxCamX > TRAVERSAL_WORLD_W - 320.0f) maxCamX = TRAVERSAL_WORLD_W - 320.0f;
+        if (g_p1.x - g_camX > 148.0f && g_camX < maxCamX) {
+            g_camX = g_p1.x - 148.0f;
+            if (g_camX > maxCamX) g_camX = maxCamX;
+        }
+
+        int aliveAfter = 0;
+        for (int i = 0; i < MAX_MINIONS; ++i) {
             MinionUnit& m = g_minions[i];
             if (!m.active) continue;
             if (m.f.act == ACT_DEAD || m.f.act == ACT_DECAPITATED) {
@@ -1665,54 +2578,54 @@ static void updateAndDrawTraversal() {
                 else m.active = false;
                 continue;
             }
-            alive++;
+            aliveAfter++;
             if (std::fabs(m.f.x - g_p1.x) < 260.0f) {
-                stepEnemyAi(m.f, g_p1, 1 + (g_actIdx / 2), 20.0f, 930.0f);
+                float arenaMin = (m.waveIdx == 0) ? 40.0f : ((m.waveIdx == 1) ? 875.0f : 1735.0f);
+                float arenaMax = (m.waveIdx == 0) ? 812.0f : ((m.waveIdx == 1) ? 1672.0f : 2505.0f);
+                stepEnemyAi(m.f, g_p1, 1 + (g_actIdx / 2), arenaMin, arenaMax);
                 checkAttackHit(g_p1, m.f, true);
                 checkAttackHit(m.f, g_p1, false);
             }
         }
-        g_minionsRemaining = alive;
+        g_minionsRemaining = aliveAfter;
         updateParticles();
 
         if (g_p1.hp <= 0 && g_p1.timer <= 2) {
-            // Respawn Krom at start of zone with full HP
             startTraversal(g_actIdx);
             return;
         }
-        if (g_minionsRemaining == 0 && g_p1.x >= 865.0f) {
-            // Reached Boss Arena! Trigger Boss Cutscene
+        if (g_minionsRemaining == 0 && g_p1.x >= TRAVERSAL_WORLD_W - 55.0f) {
             startCutscene(static_cast<uint8_t>(g_actIdx * 2 + 1));
             return;
         }
     }
 
-    drawStageBackground(g_actIdx, static_cast<int>(g_camX));
-    drawAmbientStageLights(g_actIdx, static_cast<int>(g_camX));
+    const int camI = static_cast<int>(g_camX);
+    drawTraversalBackdrop1600(g_actIdx, camI);
+    drawStageDecorAnimations(g_actIdx, camI, true, g_bannerTimer > 0);
 
-    // Persistent floor stains (Gore mode)
     for (int i = 0; i < g_stainCount; ++i) {
-        int sx = g_stains[i].x - static_cast<int>(g_camX);
+        int sx = g_stains[i].x - camI;
         if (sx >= 0 && sx < 316) {
             gfx.setColor(g_stains[i].col);
             gfx.fillRect(sx, g_stains[i].y, g_stains[i].w, 2);
         }
     }
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < MAX_MINIONS; ++i) {
         if (!g_minions[i].active) continue;
-        int sx = static_cast<int>(g_minions[i].f.x - g_camX);
+        int sx = static_cast<int>(g_minions[i].f.x) - camI;
         if (sx < -40 || sx > 360) continue;
         drawSpriteAnchored(getFighterSpriteId(g_minions[i].f), sx, static_cast<int>(g_minions[i].f.y),
                            g_minions[i].f.facing, g_minions[i].f.hitFlash > 0);
     }
 
-    drawSpriteAnchored(getFighterSpriteId(g_p1), static_cast<int>(g_p1.x - g_camX),
+    drawSpriteAnchored(getFighterSpriteId(g_p1), static_cast<int>(g_p1.x) - camI,
                        static_cast<int>(g_p1.y), g_p1.facing, g_p1.hitFlash > 0);
 
     for (int i = 0; i < MAX_PARTICLES; ++i) {
         if (g_particles[i].life <= 0) continue;
-        int px = static_cast<int>(g_particles[i].x - g_camX);
+        int px = static_cast<int>(g_particles[i].x) - camI;
         int py = static_cast<int>(g_particles[i].y);
         if (px >= 0 && px < 318 && py >= 0 && py < 238) {
             gfx.setColor(g_particles[i].col);
@@ -1720,35 +2633,36 @@ static void updateAndDrawTraversal() {
         }
     }
 
-    drawHpBar(10, 16, 108, g_p1.hp, g_p1.maxHp, "KROM", lcd_color_rgb(235, 175, 45));
-    char hud[48];
-    std::snprintf(hud, sizeof(hud), "SCORE %lu  ECLATS %d", static_cast<unsigned long>(g_score), g_shards);
-    drawUtf8Text(132, 8, hud, lcd_color_rgb(240, 232, 210));
+    drawHpBar(8, 16, 102, g_p1.hp, g_p1.maxHp, L.skinNames[SKIN_KROM], lcd_color_rgb(235, 175, 45));
+    char hud[56];
+    std::snprintf(hud, sizeof(hud), L.hudPtsShardsFmt, static_cast<unsigned long>(g_score), g_shards);
+    drawUtf8Clipped(118, 7, 116, 316, hud, lcd_color_rgb(240, 232, 210));
     if (g_minionsRemaining == 0) {
-        drawUtf8Text(142, 20, "AVANCEZ VERS LE BOSS >>", lcd_color_rgb(120, 255, 145));
+        drawUtf8Clipped(118, 19, 116, 316, L.hudPathClear, lcd_color_rgb(120, 255, 145));
     } else {
-        std::snprintf(hud, sizeof(hud), "ENNEMIS : %d  (RUN:Forge)", g_minionsRemaining);
-        drawUtf8Text(132, 20, hud, lcd_color_rgb(210, 215, 225));
+        std::snprintf(hud, sizeof(hud), L.hudFoesFmt, g_minionsRemaining);
+        drawUtf8Clipped(118, 19, 116, 316, hud, lcd_color_rgb(210, 215, 225));
     }
 
-    if (g_bannerTimer > 0) {
+    if (g_bannerTimer > 0 && g_bannerId < BNR_COUNT) {
         g_bannerTimer--;
-        drawUtf8Centered(42, g_bannerMsg, lcd_color_rgb(255, 215, 85));
+        drawUtf8Centered(42, L.banners[g_bannerId], lcd_color_rgb(255, 215, 85));
     }
 }
 
 static void updateAndDrawDuel() {
+    const LocalePack& L = loc();
+
     if (g_hitstop > 0) {
         g_hitstop--;
     } else {
         const bool roundOver = (g_p1.hp <= 0 || g_p2.hp <= 0);
         if (!roundOver) {
-            // Auto-face opponent when idle/walking
             if (g_p1.act == ACT_IDLE || g_p1.act == ACT_WALK) {
                 g_p1.facing = (g_p2.x >= g_p1.x) ? 1 : -1;
             }
             controlPlayerFighter(g_p1, 22.0f, 298.0f);
-            stepEnemyAi(g_p2, g_p1, 1 + g_actIdx, 22.0f, 298.0f);
+            stepEnemyAi(g_p2, g_p1, 2 + g_actIdx, 22.0f, 298.0f);
             checkAttackHit(g_p1, g_p2, false);
             checkAttackHit(g_p2, g_p1, false);
         } else {
@@ -1767,12 +2681,10 @@ static void updateAndDrawDuel() {
                     g_p2.hitFlash = 0;
                 }
             }
-            // Keep ticking hitFlash, death/decap timer & gravity during round end!
             controlPlayerFighter(g_p1, 22.0f, 298.0f);
-            stepEnemyAi(g_p2, g_p1, 1 + g_actIdx, 22.0f, 298.0f);
+            stepEnemyAi(g_p2, g_p1, 2 + g_actIdx, 22.0f, 298.0f);
             g_roundEndTimer++;
 
-            // Goblin cleaner trots in, laughs, then drags fallen fighter!
             if (g_goblinActive) {
                 g_goblinTick++;
                 if (g_goblinTick < 75 && g_goblinX < g_p2.x - 28.0f) {
@@ -1800,14 +2712,14 @@ static void updateAndDrawDuel() {
                 } else {
                     clearArenaFx();
                     g_roundEndTimer = 0;
+                    g_playerSweepStreak = 0;
                     initFighter(g_p1, SKIN_KROM, 92.0f, 1, getKromMaxHp());
                     initFighter(g_p2, g_p2.skin, 228.0f, -1, g_p2.maxHp);
-                    showBanner("MANCHE SUIVANTE !", 65);
+                    showBanner(BNR_NEXT_ROUND, 65);
                 }
             }
         }
 
-        // Bouncing severed head physics
         if (g_headActive) {
             g_headX += g_headVx;
             g_headY += g_headVy;
@@ -1829,7 +2741,7 @@ static void updateAndDrawDuel() {
     }
 
     drawStageBackground(g_actIdx, shakeX);
-    drawAmbientStageLights(g_actIdx, 0);
+    drawStageDecorAnimations(g_actIdx, 0, false, g_bannerTimer > 0 || g_hitstop > 0);
 
     for (int i = 0; i < g_stainCount; ++i) {
         gfx.setColor(g_stains[i].col);
@@ -1864,27 +2776,23 @@ static void updateAndDrawDuel() {
         }
     }
 
-    static const char* SKIN_LABELS[SKIN_COUNT] = {
-        "KROM", "RIVAL AKA", "GORGAR", "VORGATH", "MALAKOR", "SEIGNEUR DRAX",
-        "PILLARD", "SQUELETTE", "FAUVE", "GARDE NOIR"
-    };
-    drawHpBar(10, 16, 122, g_p1.hp, g_p1.maxHp, "KROM", lcd_color_rgb(235, 175, 45));
-    drawHpBar(188, 16, 122, g_p2.hp, g_p2.maxHp, SKIN_LABELS[g_p2.skin], lcd_color_rgb(215, 48, 52));
+    drawHpBar(10, 16, 122, g_p1.hp, g_p1.maxHp, L.skinNames[SKIN_KROM], lcd_color_rgb(235, 175, 45));
+    drawHpBar(188, 16, 122, g_p2.hp, g_p2.maxHp, L.skinNames[g_p2.skin], lcd_color_rgb(215, 48, 52), true);
 
     char scoreMid[16];
     std::snprintf(scoreMid, sizeof(scoreMid), "%d - %d", g_p1Rounds, g_p2Rounds);
     drawUtf8Centered(14, scoreMid, lcd_color_rgb(255, 220, 110));
 
-    if (g_bannerTimer > 0) {
+    if (g_bannerTimer > 0 && g_bannerId < BNR_COUNT) {
         g_bannerTimer--;
-        drawUtf8Centered(42, g_bannerMsg, lcd_color_rgb(255, 215, 85));
+        drawUtf8Centered(42, L.banners[g_bannerId], lcd_color_rgb(255, 215, 85));
     }
 }
 
 } // namespace
 
 // ============================================================================
-// 6. ESP-IDF ENTRY POINT (Gamebuino AKA Official Lifecycle)
+// 7. ESP-IDF ENTRY POINT (Gamebuino AKA Official Lifecycle)
 // ============================================================================
 
 static const char* const CONTROL_KEYS[] = {
@@ -1895,19 +2803,19 @@ extern "C" void app_main(void) {
     g_core.init();
     g_core.buttons.set_run_power_off(false);
     gfx.set_backlight_percent(85);
-    gfx.clear(lcd_color_rgb(10, 12, 18));
-    drawUtf8Centered(112, "CHARGEMENT DU GLAIVE D'ACIER...", lcd_color_rgb(245, 195, 70));
-    gfx.update();
 
     input_init();
     akaRuntime.begin("Krom_Barbarian");
-    akaRuntime.setCredits("Krom : Le Glaive d'Acier", "Studio Krom AKA", "MIT",
-                          "https://github.com");
+
+    // Immediately display boot splash in the saved device language!
+    gfx.clear(lcd_color_rgb(10, 12, 18));
+    drawUtf8Centered(112, loc().titleMain, lcd_color_rgb(245, 195, 70));
+    gfx.update();
+
     akaRuntime.setControlsKeys(CONTROL_KEYS);
     akaRuntime.setGameMenuCallback(returnToTitleCallback);
     akaRuntime.setVolumeChangedCallback(onSystemVolumeChanged);
 
-    // Initialize 4-channel Gamebuino AKA audio mixer
     g_audio.set_master_volume(215);
     g_audio.add_track(&g_trackLead, 0.42f);
     g_audio.add_track(&g_trackBass, 0.46f);
@@ -1915,17 +2823,14 @@ extern "C" void app_main(void) {
     g_audio.add_track(&g_trackSfx, 0.85f);
     applyAudioVolumes(akaRuntime.getMusicVolume(), akaRuntime.getSfxVolume());
 
-    // Unpack cleaned sprites & 320x240 stage backgrounds into ESP32-S3 PSRAM
     unpackAllAssetsToPsram();
     g_lastStepMs = g_core.get_millis();
 
     while (true) {
         const uint32_t frameStart = g_core.get_millis();
 
-        // Single I2C/ADC reader per frame via input_poll(g_keys)
         input_poll(g_keys);
 
-        // Official AKA System Menu (MENU button / RUN+MENU return to OTA_1 Loader)
         if (!akaRuntime.update(g_keys)) {
             g_audio.pool();
             g_core.delay_ms(16);

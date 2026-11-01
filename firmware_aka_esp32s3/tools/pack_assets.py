@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Generates firmware_aka_esp32s3/main/krom_assets.h from the verified cleaned PNG
-sprite sheets and 320x240 stage backgrounds in public/sheets/.
+sprite sheets, 320x240 duel stages, and seamless 1600x240 traversal panoramas in
+public/sheets/.
 
 Color format: Gamebuino AKA ST7789V native BGR565 matching lcd_color_rgb(r, g, b):
     (r >> 3) | ((g >> 2) << 5) | ((b >> 3) << 11)
@@ -145,30 +146,70 @@ def read_png_rgba(path: str):
     return width, height, rgba
 
 
-def pack_stage_256(path: str):
+def pack_palette_256(path: str, tw: int = 320, th: int = 240, max_colors: int = 256):
+    if shutil.which("convert") and max_colors < 256:
+        raw_rgb = subprocess.check_output(
+            [
+                "convert",
+                path,
+                "-filter",
+                "Point",
+                "-resize",
+                f"{tw}x{th}!",
+                "+dither",
+                "-colors",
+                str(max_colors),
+                "-depth",
+                "8",
+                "rgb:-",
+            ]
+        )
+        pal_bgr565 = []
+        color_to_idx = {}
+        indices = bytearray(tw * th)
+        for px in range(tw * th):
+            off = px * 3
+            c = lcd_color_rgb(raw_rgb[off], raw_rgb[off + 1], raw_rgb[off + 2])
+            idx = color_to_idx.get(c)
+            if idx is None:
+                if len(pal_bgr565) < 256:
+                    idx = len(pal_bgr565)
+                    pal_bgr565.append(c)
+                    color_to_idx[c] = idx
+                else:
+                    idx = 0
+            indices[px] = idx
+        while len(pal_bgr565) < 256:
+            pal_bgr565.append(0)
+        return pal_bgr565, bytes(indices)
+
     w, h, rgba = read_png_rgba(path)
-    tw, th = 320, 240
-    # Sample to 320x240 and quantize to a rich per-stage 256-color BGR565 palette
-    # Bucket by 4-bit R, 4-bit G, 4-bit B -> pick top 256 buckets, map nearest
-    pixels_rgb = []
+    pixels_bk = [0] * (tw * th)
     bucket_counts = {}
     bucket_sums = {}
+    idx_out = 0
     for y in range(th):
         sy = min(h - 1, (y * h) // th)
+        row_off = sy * w * 4
         for x in range(tw):
             sx = min(w - 1, (x * w) // tw)
-            off = (sy * w + sx) * 4
+            off = row_off + sx * 4
             r, g, b = rgba[off], rgba[off + 1], rgba[off + 2]
-            pixels_rgb.append((r, g, b))
             bk = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
+            pixels_bk[idx_out] = bk
+            idx_out += 1
             bucket_counts[bk] = bucket_counts.get(bk, 0) + 1
             if bk not in bucket_sums:
-                bucket_sums[bk] = [0, 0, 0]
-            bucket_sums[bk][0] += r
-            bucket_sums[bk][1] += g
-            bucket_sums[bk][2] += b
+                bucket_sums[bk] = [r, g, b]
+            else:
+                s = bucket_sums[bk]
+                s[0] += r
+                s[1] += g
+                s[2] += b
 
-    top_buckets = sorted(bucket_counts.keys(), key=lambda k: -bucket_counts[k])[:256]
+    top_buckets = sorted(bucket_counts.keys(), key=lambda k: -bucket_counts[k])[
+        :max_colors
+    ]
     pal_rgb = []
     pal_bgr565 = []
     bk_to_idx = {}
@@ -183,9 +224,7 @@ def pack_stage_256(path: str):
 
     while len(pal_bgr565) < 256:
         pal_bgr565.append(0)
-        pal_rgb.append((0, 0, 0))
 
-    # Map all buckets to nearest in pal_rgb
     for bk in bucket_counts.keys():
         if bk in bk_to_idx:
             continue
@@ -203,17 +242,121 @@ def pack_stage_256(path: str):
         bk_to_idx[bk] = best_i
 
     indices = bytearray(tw * th)
-    for i, (r, g, b) in enumerate(pixels_rgb):
-        bk = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
+    for i, bk in enumerate(pixels_bk):
         indices[i] = bk_to_idx[bk]
 
     return pal_bgr565, bytes(indices)
 
 
-def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, bw: int, bh: int):
+def lzss_encode_indices(indices: bytes) -> bytes:
+    """Fast lossless byte-aligned LZSS encoder for 8-bit palette indices:
+    - 0x00..0x7F (tag): (tag + 1) literal bytes follow (1..128)
+    - 0x80..0xFF (tag) + 1 byte (lo):
+        len = ((tag - 0x80) >> 4) + 3     (3..10 bytes)
+        off = (((tag & 0x0F) << 8) | lo) + 1 (1..4096 bytes back; covers offset=2560 scanline!)
+    """
+    n = len(indices)
+    out = bytearray()
+    head = [-1] * 8192
+    prev = [-1] * 4096
+    lit = bytearray()
+
+    def flush_lit():
+        if not lit:
+            return
+        mv = 0
+        while mv < len(lit):
+            chunk = lit[mv : mv + 128]
+            out.append(len(chunk) - 1)
+            out.extend(chunk)
+            mv += len(chunk)
+        lit.clear()
+
+    i = 0
+    while i < n:
+        best_len = 0
+        best_off = 0
+        if i + 3 <= n:
+            h = ((indices[i] * 33) ^ (indices[i + 1] * 17) ^ indices[i + 2]) & 8191
+            cand = head[h]
+            max_l = min(10, n - i)
+            steps = 0
+            while cand != -1 and (i - cand) <= 4096 and steps < 24:
+                steps += 1
+                if (
+                    best_len < max_l
+                    and indices[cand + best_len] == indices[i + best_len]
+                ):
+                    ml = 0
+                    while ml < max_l and indices[cand + ml] == indices[i + ml]:
+                        ml += 1
+                    if ml >= 3 and ml > best_len:
+                        best_len = ml
+                        best_off = i - cand
+                        if best_len == 10:
+                            break
+                cand = prev[cand & 4095]
+
+        if best_len >= 3:
+            flush_lit()
+            off_m1 = best_off - 1
+            tag = 0x80 | ((best_len - 3) << 4) | ((off_m1 >> 8) & 0x0F)
+            out.append(tag)
+            out.append(off_m1 & 0xFF)
+            for k in range(best_len):
+                pos = i + k
+                if pos + 3 <= n:
+                    hk = (
+                        (indices[pos] * 33)
+                        ^ (indices[pos + 1] * 17)
+                        ^ indices[pos + 2]
+                    ) & 8191
+                    prev[pos & 4095] = head[hk]
+                    head[hk] = pos
+            i += best_len
+        else:
+            if i + 3 <= n:
+                hk = (
+                    (indices[i] * 33) ^ (indices[i + 1] * 17) ^ indices[i + 2]
+                ) & 8191
+                prev[i & 4095] = head[hk]
+                head[hk] = i
+            lit.append(indices[i])
+            if len(lit) == 128:
+                flush_lit()
+            i += 1
+
+    flush_lit()
+    return bytes(out)
+
+
+def lzss_decode_verify(encoded: bytes, expected_len: int) -> bytes:
+    out = bytearray()
+    pos = 0
+    n = len(encoded)
+    while pos < n and len(out) < expected_len:
+        tag = encoded[pos]
+        pos += 1
+        if tag < 0x80:
+            cnt = tag + 1
+            out.extend(encoded[pos : pos + cnt])
+            pos += cnt
+        else:
+            lo = encoded[pos]
+            pos += 1
+            ml = ((tag - 0x80) >> 4) + 3
+            off = (((tag & 0x0F) << 8) | lo) + 1
+            for _ in range(ml):
+                out.append(out[-off])
+    return bytes(out[:expected_len])
+
+
+def clean_cropped_box_rgba(
+    sw: int, sh: int, rgba: bytearray, bx: int, by: int, bw: int, bh: int
+):
     """Extracts (bx, by, bw, bh) with a 2px border and runs a 3-stage #FF00FF chroma-key
     + exterior magenta halo erosion + dark-outline magenta de-spill, preserving all
-    interior purple/amethyst details (e.g. Seigneur Drax's armor & runes)."""
+    interior purple/amethyst details."""
     pad = 2
     x0 = bx - pad
     y0 = by - pad
@@ -222,7 +365,6 @@ def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, 
     crop = bytearray(cw * ch * 4)
     opaque = bytearray(cw * ch)
 
-    # Stage 1: Core alpha & #FF00FF chroma-key removal
     for cy in range(ch):
         sy = y0 + cy
         if sy < 0 or sy >= sh:
@@ -241,6 +383,8 @@ def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, 
             if a < 128:
                 continue
             if r > 195 and b > 190 and g < 85 and (r + b - g * 2) > 225:
+                continue
+            if r > 155 and b > 155 and g < 48 and abs(r - b) <= 16:
                 continue
             idx = dst_row + cx
             doff = idx * 4
@@ -262,8 +406,7 @@ def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, 
                     return True
         return False
 
-    # Stage 2: 2-pass exterior anti-aliased pink/magenta fringe erosion (8-connected to bg)
-    for _ in range(2):
+    for _ in range(3):
         prev = bytearray(opaque)
         for cy in range(ch):
             row = cy * cw
@@ -274,16 +417,15 @@ def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, 
                 doff = idx * 4
                 r, g, b = crop[doff], crop[doff + 1], crop[doff + 2]
                 if (
-                    r > 135
-                    and b > 130
-                    and r > g + 46
-                    and b > g + 46
+                    r > 130
+                    and b > 125
+                    and r > g + 44
+                    and b > g + 44
                     and abs(r - b) < 42
                 ):
                     opaque[idx] = 0
                     crop[doff + 3] = 0
 
-    # Stage 3: Neutralize dark-magenta spill on the outer 2px source ring (= 1px at 0.35x AKA scale)
     prev = bytearray(opaque)
     for cy in range(ch):
         row = cy * cw
@@ -302,44 +444,59 @@ def clean_cropped_box_rgba(sw: int, sh: int, rgba: bytearray, bx: int, by: int, 
     return pad, cw, crop, opaque
 
 
-def extract_scaled_sprite_rle(sheet_img, box, scale: float):
+def extract_scaled_sprite_rle(
+    sheet_img, box, scale: float, precleaned_alpha: bool = False
+):
     sw, sh, rgba = sheet_img
     bx, by, bw, bh, bax = box
     dw = max(1, int(round(bw * scale)))
     dh = max(1, int(round(bh * scale)))
     dax = int(round(bax * scale))
 
-    pad, cw, crop, opaque = clean_cropped_box_rgba(sw, sh, rgba, bx, by, bw, bh)
-
     words = []
-    for dy in range(dh):
-        cy = pad + min(bh - 1, int((dy + 0.5) * bh / dh))
-        row = cy * cw
-        for dx in range(dw):
-            cx = pad + min(bw - 1, int((dx + 0.5) * bw / dw))
-            idx = row + cx
-            if opaque[idx] == 0:
-                words.append(TRANSPARENT_KEY)
-            else:
-                doff = idx * 4
-                words.append(lcd_color_rgb(crop[doff], crop[doff + 1], crop[doff + 2]))
+    if precleaned_alpha:
+        # Sheet already has crisp alpha==0 background and preserved violet arcane flames!
+        for dy in range(dh):
+            sy = max(0, min(sh - 1, by + min(bh - 1, int((dy + 0.5) * bh / dh))))
+            row_off = sy * sw * 4
+            for dx in range(dw):
+                sx = max(0, min(sw - 1, bx + min(bw - 1, int((dx + 0.5) * bw / dw))))
+                soff = row_off + sx * 4
+                if rgba[soff + 3] < 128:
+                    words.append(TRANSPARENT_KEY)
+                else:
+                    words.append(
+                        lcd_color_rgb(rgba[soff], rgba[soff + 1], rgba[soff + 2])
+                    )
+    else:
+        pad, cw, crop, opaque = clean_cropped_box_rgba(sw, sh, rgba, bx, by, bw, bh)
+        for dy in range(dh):
+            cy = pad + min(bh - 1, int((dy + 0.5) * bh / dh))
+            row = cy * cw
+            for dx in range(dw):
+                cx = pad + min(bw - 1, int((dx + 0.5) * bw / dw))
+                idx = row + cx
+                if opaque[idx] == 0:
+                    words.append(TRANSPARENT_KEY)
+                else:
+                    doff = idx * 4
+                    words.append(
+                        lcd_color_rgb(crop[doff], crop[doff + 1], crop[doff + 2])
+                    )
 
-    # RLE encode: byte stream where:
-    #   0x00..0x7F (n): (n + 1) transparent pixels
-    #   0x80..0xBF (n): (n - 0x80 + 1) identical opaque pixels followed by 1 uint16_t LE
-    #   0xC0..0xFF (n): (n - 0xC0 + 1) literal opaque pixels followed by count * uint16_t LE
     out = bytearray()
     i = 0
     total = len(words)
     while i < total:
         if words[i] == TRANSPARENT_KEY:
             run = 1
-            while i + run < total and words[i + run] == TRANSPARENT_KEY and run < 128:
+            while (
+                i + run < total and words[i + run] == TRANSPARENT_KEY and run < 128
+            ):
                 run += 1
             out.append(run - 1)
             i += run
         else:
-            # Check repeat run
             run = 1
             while (
                 i + run < total
@@ -370,34 +527,6 @@ def extract_scaled_sprite_rle(sheet_img, box, scale: float):
     return dw, dh, dax, bytes(out)
 
 
-def rle_encode_indices(indices: bytes) -> bytes:
-    """Lossless RLE for 8-bit palette indices:
-    - 0x00..0x7F (n): repeat next 1 byte (n + 1) times
-    - 0x80..0xFF (n): (n - 0x80 + 1) literal bytes follow
-    """
-    out = bytearray()
-    i = 0
-    total = len(indices)
-    while i < total:
-        run = 1
-        while i + run < total and indices[i + run] == indices[i] and run < 128:
-            run += 1
-        if run >= 2:
-            out.append(run - 1)
-            out.append(indices[i])
-            i += run
-        else:
-            lit = bytearray()
-            while i < total and len(lit) < 128:
-                if i + 1 < total and indices[i + 1] == indices[i] and len(lit) >= 1:
-                    break
-                lit.append(indices[i])
-                i += 1
-            out.append(0x80 | (len(lit) - 1))
-            out.extend(lit)
-    return bytes(out)
-
-
 def fmt_u8_array(data: bytes, cols: int = 48) -> str:
     lines = []
     for i in range(0, len(data), cols):
@@ -415,12 +544,19 @@ def fmt_u16_array(vals, cols: int = 24) -> str:
 
 
 def main():
-    print("Loading cleaned master sheets from public/sheets/...")
+    print("Loading cleaned master sheets & seamless 2560x240 panoramas from public/sheets/...")
     stages_src = [
-        ("STAGE_FOREST", "decor_acte1_foret_320x240.png"),
-        ("STAGE_CRYPT", "decor_acte2_crypte_320x240.png"),
-        ("STAGE_ARENA", "decor_acte3_arene_320x240.png"),
-        ("STAGE_SANCTUARY", "decor_acte4_sanctuaire_320x240.png"),
+        ("STAGE_FOREST", os.path.join(SHEETS_DIR, "decor_acte1_foret_320x240.png")),
+        ("STAGE_CRYPT", os.path.join(SHEETS_DIR, "decor_acte2_crypte_320x240.png")),
+        ("STAGE_ARENA", os.path.join(SHEETS_DIR, "decor_acte3_arene_320x240.png")),
+        ("STAGE_SANCTUARY", os.path.join(SHEETS_DIR, "decor_acte4_sanctuaire_320x240.png")),
+    ]
+
+    panoramas_src = [
+        ("PANO_FOREST", os.path.join(SHEETS_DIR, "panorama_acte1_2560x240.png")),
+        ("PANO_CRYPT", os.path.join(SHEETS_DIR, "panorama_acte2_2560x240.png")),
+        ("PANO_ARENA", os.path.join(SHEETS_DIR, "panorama_acte3_2560x240.png")),
+        ("PANO_SANCTUARY", os.path.join(SHEETS_DIR, "panorama_acte4_2560x240.png")),
     ]
 
     sheets = {
@@ -432,13 +568,9 @@ def main():
         "drax": read_png_rgba(os.path.join(SHEETS_DIR, "planche_boss4_seigneur_drax.png")),
         "minions": read_png_rgba(os.path.join(SHEETS_DIR, "planche_sbires_zones.png")),
         "goblin": read_png_rgba(os.path.join(SHEETS_DIR, "planche_gobelin_et_animations.png")),
+        "decor_anim": read_png_rgba(os.path.join(SHEETS_DIR, "planche_decors_animes.png")),
     }
 
-    # 19-slot animation table per Fighter Skin:
-    # 0:IDLE0, 1:IDLE1, 2:WALK0, 3:WALK1, 4:WALK2, 5:WALK3,
-    # 6:ATK0, 7:ATK1, 8:CLEAVE, 9:SWEEP,
-    # 10:BLOCK, 11:CROUCH, 12:JUMP, 13:HIT,
-    # 14:DEAD0, 15:DEAD1, 16:DECAP0, 17:DECAP1, 18:VICTORY
     skin_defs = [
         (
             "SKIN_KROM",
@@ -709,6 +841,106 @@ def main():
         ("GOB_DRAG", (1118, 34, 202, 150, 101)),
     ]
 
+    # (array_name, sheet_key, precleaned_alpha, scale, boxes)
+    fx_groups = [
+        (
+            "FX_TORCH_FRAMES",
+            "goblin",
+            False,
+            0.20,
+            [
+                (16, 246, 64, 168, 32),
+                (98, 237, 63, 177, 31),
+                (179, 248, 63, 166, 31),
+                (260, 246, 64, 168, 32),
+                (342, 235, 63, 179, 31),
+                (423, 252, 64, 162, 32),
+            ],
+        ),
+        (
+            "FX_CROW_FRAMES",
+            "goblin",
+            False,
+            0.16,
+            [
+                (856, 448, 102, 105, 51),
+                (976, 471, 105, 82, 52),
+                (1099, 436, 99, 117, 49),
+                (1216, 480, 102, 73, 51),
+            ],
+        ),
+        (
+            "FX_MONO_FRAMES",
+            "goblin",
+            False,
+            0.21,
+            [
+                (16, 575, 111, 200, 55),
+                (145, 575, 111, 200, 55),
+                (274, 575, 110, 200, 55),
+                (402, 575, 111, 200, 55),
+            ],
+        ),
+        (
+            "FX_BRAZIER_FRAMES",
+            "goblin",
+            False,
+            0.20,
+            [
+                (531, 585, 147, 190, 73),
+                (696, 583, 146, 192, 73),
+                (860, 579, 147, 196, 73),
+                (1025, 579, 147, 196, 73),
+            ],
+        ),
+        (
+            "FX_PORTCULLIS_FRAMES",
+            "decor_anim",
+            True,
+            0.18,
+            [
+                (18, 18, 308, 351, 154),
+                (362, 18, 308, 351, 154),
+            ],
+        ),
+        (
+            "FX_BANNER_FRAMES",
+            "decor_anim",
+            True,
+            0.17,
+            [
+                (707, 35, 135, 214, 64),
+                (873, 35, 138, 213, 64),
+                (1039, 36, 150, 212, 63),
+                (1209, 35, 143, 199, 63),
+            ],
+        ),
+        (
+            "FX_CAGE_FRAMES",
+            "decor_anim",
+            True,
+            0.22,
+            [
+                (726, 279, 93, 253, 47),
+                (901, 277, 90, 249, 45),
+                (1070, 279, 93, 256, 44),
+                (1239, 279, 112, 259, 19),
+            ],
+        ),
+        (
+            "FX_ARCANE_BRAZIER_FRAMES",
+            "decor_anim",
+            True,
+            0.20,
+            [
+                (702, 579, 144, 183, 72),
+                (874, 576, 144, 187, 72),
+                (1046, 564, 144, 199, 72),
+                (1218, 574, 144, 189, 72),
+            ],
+        ),
+    ]
+
     total_bytes = 0
     cpp = []
     cpp.append("// Auto-generated by tools/pack_assets.py — DO NOT EDIT MANUALLY")
@@ -719,9 +951,11 @@ def main():
     cpp.append(f"static constexpr uint16_t KROM_TRANSPARENT = 0x{TRANSPARENT_KEY:04X};")
     cpp.append("")
     cpp.append("struct PackedStageAsset {")
+    cpp.append("    uint16_t        w;")
+    cpp.append("    uint16_t        h;")
     cpp.append("    const uint16_t* palette256;")
-    cpp.append("    uint32_t        rleLen;")
-    cpp.append("    const uint8_t*  rleIndices;")
+    cpp.append("    uint32_t        lzLen;")
+    cpp.append("    const uint8_t*  lzIndices;")
     cpp.append("};")
     cpp.append("")
     cpp.append("struct PackedSpriteRle {")
@@ -733,35 +967,64 @@ def main():
     cpp.append("};")
     cpp.append("")
 
-    # Emit 4 stages (RLE-compressed 256-color indices)
+    # Emit 4 duel arena stages (320x240, LZSS-compressed 256-color indices)
     stage_entries = []
-    for s_name, fname in stages_src:
-        pal, idx = pack_stage_256(os.path.join(SHEETS_DIR, fname))
-        rle_idx = rle_encode_indices(idx)
-        total_bytes += len(pal) * 2 + len(rle_idx)
+    for s_name, fpath in stages_src:
+        pal, idx = pack_palette_256(fpath, 320, 240, 256)
+        lz_idx = lzss_encode_indices(idx)
+        assert lzss_decode_verify(lz_idx, len(idx)) == idx
+        total_bytes += len(pal) * 2 + len(lz_idx)
         cpp.append(f"static const uint16_t {s_name}_PAL[256] = {{")
         cpp.append(fmt_u16_array(pal))
         cpp.append("};")
-        cpp.append(f"static const uint8_t {s_name}_IDX[{len(rle_idx)}] = {{")
-        cpp.append(fmt_u8_array(rle_idx))
+        cpp.append(f"static const uint8_t {s_name}_IDX[{len(lz_idx)}] = {{")
+        cpp.append(fmt_u8_array(lz_idx))
         cpp.append("};")
-        stage_entries.append(f"    {{ {s_name}_PAL, {len(rle_idx)}, {s_name}_IDX }},")
+        stage_entries.append(
+            f"    {{ 320, 240, {s_name}_PAL, {len(lz_idx)}, {s_name}_IDX }},"
+        )
 
     cpp.append("static const PackedStageAsset PACKED_STAGES[4] = {")
     cpp.extend(stage_entries)
     cpp.append("};")
     cpp.append("")
 
-    # Emit deduplicated sprite RLE blobs
+    # Emit 4 full 2560x240 seamless pixel-art traversal panoramas (LZSS-compressed 80-color adaptive palette)
+    pano_entries = []
+    for p_name, fpath in panoramas_src:
+        pal, idx = pack_palette_256(fpath, 2560, 240, 80)
+        lz_idx = lzss_encode_indices(idx)
+        assert lzss_decode_verify(lz_idx, len(idx)) == idx
+        print(f"  Packed {p_name} (2560x240): {len(lz_idx) / 1024:.1f} KB")
+        total_bytes += len(pal) * 2 + len(lz_idx)
+        cpp.append(f"static const uint16_t {p_name}_PAL[256] = {{")
+        cpp.append(fmt_u16_array(pal))
+        cpp.append("};")
+        cpp.append(f"static const uint8_t {p_name}_IDX[{len(lz_idx)}] = {{")
+        cpp.append(fmt_u8_array(lz_idx))
+        cpp.append("};")
+        pano_entries.append(
+            f"    {{ 2560, 240, {p_name}_PAL, {len(lz_idx)}, {p_name}_IDX }},"
+        )
+
+    cpp.append("static const PackedStageAsset PACKED_PANORAMAS[4] = {")
+    cpp.extend(pano_entries)
+    cpp.append("};")
+    cpp.append("")
+
     blob_map = {}
     blob_list = []
 
-    def reg_sprite(sheet_key: str, box, scale: float):
+    def reg_sprite(
+        sheet_key: str, box, scale: float, precleaned_alpha: bool = False
+    ):
         nonlocal total_bytes
-        key = (sheet_key, box, round(scale, 3))
+        key = (sheet_key, box, round(scale, 3), precleaned_alpha)
         if key in blob_map:
             return blob_map[key]
-        dw, dh, dax, rle = extract_scaled_sprite_rle(sheets[sheet_key], box, scale)
+        dw, dh, dax, rle = extract_scaled_sprite_rle(
+            sheets[sheet_key], box, scale, precleaned_alpha
+        )
         b_idx = len(blob_list)
         blob_list.append((dw, dh, dax, rle))
         blob_map[key] = b_idx
@@ -770,10 +1033,15 @@ def main():
 
     skin_table_rows = []
     for skin_enum, sh_key, sc, boxes in skin_defs:
-        ids = [reg_sprite(sh_key, b, sc) for b in boxes]
+        ids = [reg_sprite(sh_key, b, sc, False) for b in boxes]
         skin_table_rows.append((skin_enum, ids))
 
-    gob_ids = [reg_sprite("goblin", b, 0.32) for _, b in goblin_boxes]
+    gob_ids = [reg_sprite("goblin", b, 0.32, False) for _, b in goblin_boxes]
+
+    fx_id_tables = []
+    for arr_name, sh_key, pre_a, sc, boxes in fx_groups:
+        ids = [reg_sprite(sh_key, b, sc, pre_a) for b in boxes]
+        fx_id_tables.append((arr_name, ids))
 
     for idx, (dw, dh, dax, rle) in enumerate(blob_list):
         cpp.append(f"static const uint8_t SPR_RLE_{idx}[{len(rle)}] = {{")
@@ -805,13 +1073,19 @@ def main():
         + ", ".join(str(x) for x in gob_ids)
         + " };"
     )
+    for arr_name, ids in fx_id_tables:
+        cpp.append(
+            f"static const uint16_t {arr_name}[{len(ids)}] = {{ "
+            + ", ".join(str(x) for x in ids)
+            + " };"
+        )
     cpp.append("")
 
     with open(OUT_HEADER, "w", encoding="utf-8") as f:
         f.write("\n".join(cpp) + "\n")
 
     print(
-        f"Generated {OUT_HEADER}: {len(blob_list)} unique sprites + 4 full 320x240 stages, "
+        f"Generated {OUT_HEADER}: {len(blob_list)} unique sprites + 4 duel stages + 4 2560x240 panoramas, "
         f"total binary payload = {total_bytes / 1024:.1f} KB"
     )
 

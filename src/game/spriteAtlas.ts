@@ -1,5 +1,6 @@
 import type { FighterAction, FighterSkin, FighterState, MinionSkin, StageId } from '../types/game';
 import {
+  DECOR_ANIM_COORDS,
   DRAX_COORDS,
   GOBLIN_FX_COORDS,
   GORGAR_COORDS,
@@ -10,17 +11,27 @@ import {
   VORGATH_COORDS,
   type VerifiedSpriteBox,
 } from './atlasCoords';
+import {
+  BAELGOR_COORDS,
+  MONSTERS11_COORDS,
+  NEW_SHEET_META,
+  THALGRIM_COORDS,
+} from './newAtlasCoords';
 
 export type SheetKey =
   | 'kromHero'
   | 'heroPortrait'
   | 'rivalAka'
   | 'gorgarBoss'
+  | 'thalgrimBoss'
   | 'vorgathBoss'
   | 'malakorBoss'
+  | 'baelgorBoss'
   | 'draxBoss'
   | 'minionsSheet'
-  | 'goblinAndFx';
+  | 'monsters11Sheet'
+  | 'goblinAndFx'
+  | 'decorAnim';
 
 export interface SpriteFrameDef {
   sheet: SheetKey;
@@ -32,22 +43,28 @@ export interface SpriteFrameDef {
   oy?: number;
 }
 
-const SHEET_CACHE_REV = 'v9';
+const SHEET_CACHE_REV = 'v16';
 
 export const SHEET_URLS: Record<SheetKey, string> = {
   kromHero: `/sheets/planche_j1_krom.png?${SHEET_CACHE_REV}`,
   heroPortrait: '/assets/aistudio/barbare_planche__1_1_ac713612.png',
   rivalAka: `/sheets/planche_j2_rival_aka.png?${SHEET_CACHE_REV}`,
   gorgarBoss: `/sheets/planche_boss1_gorgar.png?${SHEET_CACHE_REV}`,
+  thalgrimBoss: `/sheets/planche_boss_thalgrim.png?${SHEET_CACHE_REV}`,
   vorgathBoss: `/sheets/planche_boss2_vorgath.png?${SHEET_CACHE_REV}`,
   malakorBoss: `/sheets/planche_boss3_malakor.png?${SHEET_CACHE_REV}`,
+  baelgorBoss: `/sheets/planche_boss_baelgor.png?${SHEET_CACHE_REV}`,
   draxBoss: `/sheets/planche_boss4_seigneur_drax.png?${SHEET_CACHE_REV}`,
   minionsSheet: `/sheets/planche_sbires_zones.png?${SHEET_CACHE_REV}`,
+  monsters11Sheet: `/sheets/planche_11_monstres.png?${SHEET_CACHE_REV}`,
   goblinAndFx: `/sheets/planche_gobelin_et_animations.png?${SHEET_CACHE_REV}`,
+  decorAnim: `/sheets/planche_decors_animes.png?${SHEET_CACHE_REV}`,
 };
 
-function box(sheet: SheetKey, b: VerifiedSpriteBox): SpriteFrameDef {
-  return { sheet, x: b.x, y: b.y, w: b.w, h: b.h, ax: b.ax };
+function box(sheet: SheetKey, b: VerifiedSpriteBox, oy = 0): SpriteFrameDef {
+  return oy !== 0
+    ? { sheet, x: b.x, y: b.y, w: b.w, h: b.h, ax: b.ax, oy }
+    : { sheet, x: b.x, y: b.y, w: b.w, h: b.h, ax: b.ax };
 }
 
 // ============================================================================
@@ -685,18 +702,209 @@ const DRAX_VICTORY: SpriteFrameDef[] = [
 ];
 
 // ============================================================================
-// 7. LES 6 SBIRES & ÉCLAIREURS DES ZONES (Planche 1760×1944 — 126 Sprites!)
+// 6B. BOSS ACTE II — THALGRIM (Planche 1200×896 Vérifiée — 34 Sprites Runiques)
+// ============================================================================
+const THALGRIM_IDLE: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_IDLE_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_IDLE_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_IDLE_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_IDLE_3),
+];
+
+const THALGRIM_WALK: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_WALK_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_WALK_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_WALK_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_WALK_3),
+];
+
+const THALGRIM_CLEAVE: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_3),
+];
+
+const THALGRIM_CAST: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CL_3),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CROUCH_0),
+];
+
+const THALGRIM_BLOCK: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_BLOCK_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_BLOCK_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_BLOCK_2),
+];
+
+const THALGRIM_SWEEP: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_SWEEP_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_SWEEP_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_SWEEP_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_SWEEP_3),
+];
+
+const THALGRIM_CROUCH: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_CROUCH_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CROUCH_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CROUCH_2),
+];
+
+const THALGRIM_JUMP: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_JUMP_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_JUMP_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_JUMP_2),
+  box('thalgrimBoss', THALGRIM_COORDS.T_JUMP_3),
+];
+
+const THALGRIM_HIT: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_HIT_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_0),
+];
+
+const THALGRIM_KNOCKDOWN: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_HIT_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_CROUCH_2),
+];
+
+const THALGRIM_DEAD: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_HIT_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_DEAD_0),
+];
+
+const THALGRIM_GISANT: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_FALL_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_DEAD_0),
+];
+
+const THALGRIM_DECAPITATED: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_HIT_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_DECAP_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_DECAP_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_DECAP_1),
+];
+
+const THALGRIM_VICTORY: SpriteFrameDef[] = [
+  box('thalgrimBoss', THALGRIM_COORDS.T_VIC_0),
+  box('thalgrimBoss', THALGRIM_COORDS.T_VIC_1),
+  box('thalgrimBoss', THALGRIM_COORDS.T_VIC_0),
+];
+
+// ============================================================================
+// 6C. BOSS ACTE V — BAELGOR (Planche 1200×896 Vérifiée — 32 Sprites Infernaux)
+// ============================================================================
+const BAELGOR_IDLE: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_2),
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_3),
+];
+
+const BAELGOR_WALK: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_WALK_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_WALK_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_WALK_2),
+  box('baelgorBoss', BAELGOR_COORDS.B_WALK_3),
+];
+
+const BAELGOR_SLASH: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_SLASH_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_SLASH_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_THRUST_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_SLASH_0),
+];
+
+const BAELGOR_THRUST: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_THRUST_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_THRUST_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_0),
+];
+
+const BAELGOR_CAST: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_3),
+  box('baelgorBoss', BAELGOR_COORDS.B_THRUST_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_THRUST_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_IDLE_2),
+];
+
+const BAELGOR_SWEEP: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_SWEEP_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_0),
+];
+
+const BAELGOR_BLOCK: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_BLOCK_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_BLOCK_1),
+];
+
+const BAELGOR_CROUCH: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_1),
+];
+
+const BAELGOR_ROLL: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_ROLL_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_ROLL_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_ROLL_2),
+  box('baelgorBoss', BAELGOR_COORDS.B_LEAP_0),
+];
+
+const BAELGOR_JUMP: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_JUMP_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_JUMP_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_JUMP_2),
+];
+
+const BAELGOR_HIT: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_HIT_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_0),
+];
+
+const BAELGOR_KNOCKDOWN: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_HIT_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_CROUCH_1),
+];
+
+const BAELGOR_DEAD: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_HIT_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_DEAD_0),
+];
+
+const BAELGOR_GISANT: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_FALL_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_DEAD_0),
+];
+
+const BAELGOR_DECAPITATED: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_HIT_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_DECAP_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_DECAP_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_DECAP_1),
+];
+
+const BAELGOR_VICTORY: SpriteFrameDef[] = [
+  box('baelgorBoss', BAELGOR_COORDS.B_VIC_0),
+  box('baelgorBoss', BAELGOR_COORDS.B_VIC_1),
+  box('baelgorBoss', BAELGOR_COORDS.B_VIC_0),
+];
+
+// ============================================================================
+// 7. LES 17 MONSTRES & SBIRES DES 6 ZONES (6 Sbires Historiques + 11 Monstres!)
 // ============================================================================
 type MinionPrefix = 'WR' | 'MS' | 'CA' | 'CS' | 'PT' | 'DA';
-
-const MINION_SKIN_TO_PREFIX: Record<MinionSkin, MinionPrefix> = {
-  wolf_raider: 'WR',
-  monolith_spearman: 'MS',
-  cult_acolyte: 'CA',
-  crypt_skeleton: 'CS',
-  pit_thrall: 'PT',
-  drax_acolyte: 'DA',
-};
 
 interface MinionSpriteBank {
   idle: SpriteFrameDef[];
@@ -749,6 +957,48 @@ function buildMinionBank(pfx: MinionPrefix): MinionSpriteBank {
   };
 }
 
+interface M11PoseMap {
+  idle: number[];
+  walk: number[];
+  slash: number[];
+  sweep: number[];
+  block: number[];
+  crouch: number[];
+  jump: number[];
+  hit: number[];
+  knockdown: number[];
+  dead: number[];
+  gisant: number[];
+  decap: number[];
+  airOy?: number;
+  airMaxIdx?: number;
+}
+
+function buildMonster11Bank(rowCode: string, cfg: M11PoseMap): MinionSpriteBank {
+  const f = (idx: number): SpriteFrameDef => {
+    const key = `${rowCode}_${idx}` as keyof typeof MONSTERS11_COORDS;
+    const oy =
+      cfg.airOy !== undefined && idx <= (cfg.airMaxIdx ?? 99) ? cfg.airOy : 0;
+    return box('monsters11Sheet', MONSTERS11_COORDS[key], oy);
+  };
+  const mapList = (arr: number[]) => arr.map(f);
+  return {
+    idle: mapList(cfg.idle),
+    walk: mapList(cfg.walk),
+    slash: mapList(cfg.slash),
+    sweep: mapList(cfg.sweep),
+    block: mapList(cfg.block),
+    crouch: mapList(cfg.crouch),
+    jump: mapList(cfg.jump),
+    hit: mapList(cfg.hit),
+    knockdown: mapList(cfg.knockdown),
+    dead: mapList(cfg.dead),
+    gisant: mapList(cfg.gisant),
+    decapitated: mapList(cfg.decap),
+    victory: mapList([cfg.slash[0], cfg.idle[0], cfg.slash[1] ?? cfg.slash[0], cfg.idle[0]]),
+  };
+}
+
 const MINION_BANKS: Record<MinionSkin, MinionSpriteBank> = {
   wolf_raider: buildMinionBank('WR'),
   monolith_spearman: buildMinionBank('MS'),
@@ -756,10 +1006,168 @@ const MINION_BANKS: Record<MinionSkin, MinionSpriteBank> = {
   crypt_skeleton: buildMinionBank('CS'),
   pit_thrall: buildMinionBank('PT'),
   drax_acolyte: buildMinionBank('DA'),
+  goblin_scout: buildMonster11Bank('M01', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [5, 6, 7],
+    sweep: [5, 7, 2],
+    block: [1, 0],
+    crouch: [2, 0],
+    jump: [2, 6, 7],
+    hit: [8, 9],
+    knockdown: [9, 10, 11, 2],
+    dead: [9, 10, 11, 12],
+    gisant: [11, 12],
+    decap: [8, 10, 11, 12],
+  }),
+  orc_marauder: buildMonster11Bank('M02', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [4, 5, 6],
+    sweep: [2, 5, 6],
+    block: [1, 0],
+    crouch: [2, 0],
+    jump: [2, 5, 6],
+    hit: [7, 8],
+    knockdown: [8, 9, 10, 2],
+    dead: [7, 9, 10, 11],
+    gisant: [10, 11],
+    decap: [8, 9, 10, 11],
+  }),
+  undead_warrior: buildMonster11Bank('M03', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [5, 6, 7],
+    sweep: [5, 7, 2],
+    block: [1, 0],
+    crouch: [2, 0],
+    jump: [2, 6, 7],
+    hit: [8, 9],
+    knockdown: [8, 10, 11, 2],
+    dead: [8, 10, 11, 12],
+    gisant: [11, 12],
+    decap: [9, 10, 11, 12],
+  }),
+  risen_zombie: buildMonster11Bank('M04', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [5, 6, 7],
+    sweep: [4, 7, 2],
+    block: [4, 1],
+    crouch: [4, 1],
+    jump: [4, 6, 7],
+    hit: [8, 9],
+    knockdown: [9, 10, 11, 4],
+    dead: [8, 10, 11, 12],
+    gisant: [11, 12],
+    decap: [9, 10, 11, 12],
+  }),
+  dire_wolf: buildMonster11Bank('M05', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [4, 5, 2],
+    sweep: [3, 5, 2],
+    block: [6, 0],
+    crouch: [3, 0],
+    jump: [4, 5, 2],
+    hit: [6, 7],
+    knockdown: [7, 9, 3],
+    dead: [7, 9, 10],
+    gisant: [9, 10],
+    decap: [7, 9, 10],
+  }),
+  cave_bat: buildMonster11Bank('M06', {
+    idle: [0, 1],
+    walk: [2, 3, 4, 5],
+    slash: [6, 7, 5],
+    sweep: [6, 7, 4],
+    block: [4, 1],
+    crouch: [4, 5],
+    jump: [2, 3, 6],
+    hit: [8, 9],
+    knockdown: [8, 9, 10, 4],
+    dead: [9, 10, 12, 13],
+    gisant: [12, 13],
+    decap: [8, 10, 11, 13],
+    airOy: -22,
+    airMaxIdx: 9,
+  }),
+  spectral_wraith: buildMonster11Bank('M07', {
+    idle: [0, 1],
+    walk: [2, 3, 4],
+    slash: [4, 5, 6],
+    sweep: [3, 6, 4],
+    block: [1, 0],
+    crouch: [3, 4],
+    jump: [2, 5, 6],
+    hit: [7, 8],
+    knockdown: [8, 9, 3],
+    dead: [8, 9, 10, 11],
+    gisant: [10, 11],
+    decap: [9, 10, 11],
+    airOy: -8,
+    airMaxIdx: 8,
+  }),
+  skeleton_mage: buildMonster11Bank('M08', {
+    idle: [0, 1],
+    walk: [2, 3, 1, 2],
+    slash: [4, 5, 4],
+    sweep: [3, 5, 2],
+    block: [1, 0],
+    crouch: [2, 0],
+    jump: [2, 4, 5],
+    hit: [6, 7],
+    knockdown: [7, 8, 9, 2],
+    dead: [7, 8, 9, 10],
+    gisant: [9, 10],
+    decap: [7, 8, 9, 10],
+  }),
+  imperial_halberdier: buildMonster11Bank('M09', {
+    idle: [0, 1],
+    walk: [2, 3, 1, 2],
+    slash: [4, 5, 4],
+    sweep: [4, 5, 2],
+    block: [6, 0],
+    crouch: [6, 2],
+    jump: [2, 4, 5],
+    hit: [7, 8],
+    knockdown: [8, 9, 6],
+    dead: [7, 8, 9, 10],
+    gisant: [9, 10],
+    decap: [8, 9, 10],
+  }),
+  stone_golem: buildMonster11Bank('M10', {
+    idle: [0, 1],
+    walk: [2, 3, 1, 2],
+    slash: [4, 5, 4],
+    sweep: [4, 5, 2],
+    block: [2, 0],
+    crouch: [2, 3],
+    jump: [2, 4, 5],
+    hit: [6, 7],
+    knockdown: [7, 8, 2],
+    dead: [6, 7, 8, 9],
+    gisant: [8, 9],
+    decap: [7, 8, 9],
+  }),
+  abyssal_demon: buildMonster11Bank('M11', {
+    idle: [0, 1],
+    walk: [2, 3, 1, 2],
+    slash: [4, 5, 6],
+    sweep: [3, 6, 2],
+    block: [1, 0],
+    crouch: [2, 3],
+    jump: [4, 5, 6],
+    hit: [7, 3],
+    knockdown: [7, 8, 2],
+    dead: [7, 8, 9],
+    gisant: [8, 9],
+    decap: [7, 8, 9],
+  }),
 };
 
 export function isMinionSkin(skin: FighterSkin): skin is MinionSkin {
-  return skin in MINION_SKIN_TO_PREFIX;
+  return skin in MINION_BANKS;
 }
 
 // ============================================================================
@@ -833,6 +1241,41 @@ export const FX_BRAZIER_FRAMES: SpriteFrameDef[] = [
   box('goblinAndFx', GOBLIN_FX_COORDS.BRAZIER_3),
 ];
 
+export const FX_PORTCULLIS_CLOSED: SpriteFrameDef = box(
+  'decorAnim',
+  DECOR_ANIM_COORDS.PORTCULLIS_CLOSED
+);
+
+export const FX_PORTCULLIS_OPEN: SpriteFrameDef = box(
+  'decorAnim',
+  DECOR_ANIM_COORDS.PORTCULLIS_OPEN
+);
+
+export const FX_BANNER_FRAMES: SpriteFrameDef[] = [
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_0),
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_1),
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_2),
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_3),
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_2),
+  box('decorAnim', DECOR_ANIM_COORDS.BANNER_1),
+];
+
+export const FX_CAGE_FRAMES: SpriteFrameDef[] = [
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_0),
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_1),
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_2),
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_3),
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_2),
+  box('decorAnim', DECOR_ANIM_COORDS.CAGE_1),
+];
+
+export const FX_ARCANE_BRAZIER_FRAMES: SpriteFrameDef[] = [
+  box('decorAnim', DECOR_ANIM_COORDS.ARCANE_BRAZIER_0),
+  box('decorAnim', DECOR_ANIM_COORDS.ARCANE_BRAZIER_1),
+  box('decorAnim', DECOR_ANIM_COORDS.ARCANE_BRAZIER_2),
+  box('decorAnim', DECOR_ANIM_COORDS.ARCANE_BRAZIER_3),
+];
+
 // ============================================================================
 // CHROMA-KEY PIPELINE (Preserves Interior Amethyst/Purple Runes!)
 // ============================================================================
@@ -860,35 +1303,44 @@ export function chromaKeyMagentaSheet(img: HTMLImageElement): HTMLCanvasElement 
     const g = d[i + 1];
     const b = d[i + 2];
 
-    if (r > 195 && b > 190 && g < 85 && r + b - g * 2 > 225) {
+    if (
+      (r > 195 && b > 190 && g < 85 && r + b - g * 2 > 225) ||
+      (r > 155 && b > 155 && g < 48 && Math.abs(r - b) <= 16)
+    ) {
       d[i + 3] = 0;
     }
   }
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = (y * w + x) * 4;
-      if (d[idx + 3] === 0) continue;
+  for (let pass = 0; pass < 2; pass++) {
+    const prevAlpha = new Uint8Array(w * h);
+    for (let p = 0; p < w * h; p++) prevAlpha[p] = d[p * 4 + 3];
 
-      const touchesBg =
-        (x > 0 && d[idx - 4 + 3] === 0) ||
-        (x < w - 1 && d[idx + 4 + 3] === 0) ||
-        (y > 0 && d[idx - w * 4 + 3] === 0) ||
-        (y < h - 1 && d[idx + w * 4 + 3] === 0);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const pIdx = y * w + x;
+        if (prevAlpha[pIdx] === 0) continue;
 
-      if (!touchesBg) continue;
+        const touchesBg =
+          (x > 0 && prevAlpha[pIdx - 1] === 0) ||
+          (x < w - 1 && prevAlpha[pIdx + 1] === 0) ||
+          (y > 0 && prevAlpha[pIdx - w] === 0) ||
+          (y < h - 1 && prevAlpha[pIdx + w] === 0);
 
-      const r = d[idx];
-      const g = d[idx + 1];
-      const b = d[idx + 2];
-      if (r > g + 42 && b > g + 42) {
-        if (r > 165 && b > 160 && g < 105) {
-          d[idx + 3] = 0;
-        } else {
-          const lum = Math.round(g * 0.72 + Math.min(r, b) * 0.2);
-          d[idx] = lum;
-          d[idx + 1] = lum;
-          d[idx + 2] = lum;
+        if (!touchesBg) continue;
+
+        const idx = pIdx * 4;
+        const r = d[idx];
+        const g = d[idx + 1];
+        const b = d[idx + 2];
+        if (r > g + 42 && b > g + 42 && Math.abs(r - b) < 46) {
+          if (r > 135 && b > 130 && g < 105) {
+            d[idx + 3] = 0;
+          } else if (pass === 1) {
+            const lum = Math.round(g * 0.72 + Math.min(r, b) * 0.2);
+            d[idx] = lum;
+            d[idx + 1] = lum;
+            d[idx + 2] = lum;
+          }
         }
       }
     }
@@ -968,6 +1420,10 @@ export function getSkinSheetCanvas(
 
 export function getFighterScale(skin: FighterSkin): number {
   switch (skin) {
+    case 'thalgrim':
+      return 0.48; // ~68px tall runic crystal warden boss
+    case 'baelgor':
+      return 0.43; // ~72px tall infernal warlord boss
     case 'vorgath':
       return 0.39; // ~71px tall dungeon executioner boss
     case 'drax':
@@ -979,17 +1435,39 @@ export function getFighterScale(skin: FighterSkin): number {
     case 'rival_aka':
       return 0.48; // ~65px tall braided sapphire warrior
     case 'wolf_raider':
-      return 0.50; // ~56px compact Nordic scout
+      return 0.50;
     case 'monolith_spearman':
-      return 0.51; // ~58px barrow guard
+      return 0.51;
     case 'cult_acolyte':
-      return 0.41; // ~58px volcanic zealot
+      return 0.41;
     case 'crypt_skeleton':
-      return 0.51; // ~58px undead legionnaire
+      return 0.51;
     case 'pit_thrall':
-      return 0.43; // ~60px sand gladiator
+      return 0.43;
     case 'drax_acolyte':
-      return 0.45; // ~61px spectral sentinel
+      return 0.45;
+    case 'goblin_scout':
+      return 0.76;
+    case 'orc_marauder':
+      return 0.68;
+    case 'undead_warrior':
+      return 0.74;
+    case 'risen_zombie':
+      return 0.74;
+    case 'dire_wolf':
+      return 0.66;
+    case 'cave_bat':
+      return 0.65;
+    case 'spectral_wraith':
+      return 0.64;
+    case 'skeleton_mage':
+      return 0.64;
+    case 'imperial_halberdier':
+      return 0.70;
+    case 'stone_golem':
+      return 0.74;
+    case 'abyssal_demon':
+      return 0.70;
     case 'krom':
     default:
       return 0.36; // ~67px tall unified Krom barbarian on 320x240
@@ -1266,6 +1744,86 @@ export function getFighterAnimationFrames(
     }
   }
 
+  if (skin === 'thalgrim') {
+    switch (action) {
+      case 'idle':
+        return THALGRIM_IDLE;
+      case 'walk_fwd':
+      case 'walk_back':
+        return THALGRIM_WALK;
+      case 'jump':
+        return THALGRIM_JUMP;
+      case 'crouch':
+      case 'roll_fwd':
+      case 'roll_back':
+        return THALGRIM_CROUCH;
+      case 'block_high':
+        return THALGRIM_BLOCK;
+      case 'slash_high':
+      case 'cleave_overhead':
+        return THALGRIM_CLEAVE;
+      case 'boss_cast':
+        return THALGRIM_CAST;
+      case 'thrust_mid':
+      case 'sweep_low':
+      case 'spin_decap':
+        return THALGRIM_SWEEP;
+      case 'hit_stun':
+        return THALGRIM_HIT;
+      case 'parried_stun':
+        return [THALGRIM_BLOCK[1], THALGRIM_HIT[0], THALGRIM_HIT[1]];
+      case 'knockdown':
+        return THALGRIM_KNOCKDOWN;
+      case 'dead':
+        return THALGRIM_DEAD;
+      case 'decapitated':
+        return THALGRIM_DECAPITATED;
+      case 'victory':
+        return THALGRIM_VICTORY;
+    }
+  }
+
+  if (skin === 'baelgor') {
+    switch (action) {
+      case 'idle':
+        return BAELGOR_IDLE;
+      case 'walk_fwd':
+      case 'walk_back':
+        return BAELGOR_WALK;
+      case 'jump':
+        return BAELGOR_JUMP;
+      case 'crouch':
+        return BAELGOR_CROUCH;
+      case 'roll_fwd':
+      case 'roll_back':
+        return BAELGOR_ROLL;
+      case 'block_high':
+        return BAELGOR_BLOCK;
+      case 'slash_high':
+      case 'cleave_overhead':
+      case 'spin_decap':
+        return BAELGOR_SLASH;
+      case 'thrust_mid':
+        return BAELGOR_THRUST;
+      case 'boss_cast':
+        return BAELGOR_CAST;
+      case 'sweep_low':
+        return BAELGOR_SWEEP;
+      case 'hit_stun':
+        return BAELGOR_HIT;
+      case 'parried_stun':
+        return [BAELGOR_BLOCK[1], BAELGOR_HIT[0], BAELGOR_HIT[1]];
+      case 'knockdown':
+        return BAELGOR_KNOCKDOWN;
+      case 'dead':
+        return BAELGOR_DEAD;
+      case 'decapitated':
+        return BAELGOR_DECAPITATED;
+      case 'victory':
+        return BAELGOR_VICTORY;
+    }
+  }
+
   switch (action) {
     case 'idle':
       return KROM_IDLE;
@@ -1354,8 +1912,22 @@ export function selectGoblinSpriteFrame(
   return pickCycle(GOBLIN_WALK_FRAMES, tick, 5);
 }
 
+export type FxSpriteKind =
+  | 'torch'
+  | 'lava'
+  | 'fireball'
+  | 'sparks'
+  | 'crow'
+  | 'monolith'
+  | 'brazier'
+  | 'banner'
+  | 'cage'
+  | 'arcane_brazier'
+  | 'portcullis_closed'
+  | 'portcullis_open';
+
 export function selectFxSpriteFrame(
-  kind: 'torch' | 'lava' | 'fireball' | 'sparks' | 'crow' | 'monolith' | 'brazier',
+  kind: FxSpriteKind,
   tick: number
 ): SpriteFrameDef {
   switch (kind) {
@@ -1373,6 +1945,16 @@ export function selectFxSpriteFrame(
       return pickCycle(FX_MONOLITH_FRAMES, tick, 10);
     case 'brazier':
       return pickCycle(FX_BRAZIER_FRAMES, tick, 5);
+    case 'banner':
+      return pickCycle(FX_BANNER_FRAMES, tick, 9);
+    case 'cage':
+      return pickCycle(FX_CAGE_FRAMES, tick, 11);
+    case 'arcane_brazier':
+      return pickCycle(FX_ARCANE_BRAZIER_FRAMES, tick, 5);
+    case 'portcullis_closed':
+      return FX_PORTCULLIS_CLOSED;
+    case 'portcullis_open':
+      return FX_PORTCULLIS_OPEN;
   }
 }
 
@@ -1381,7 +1963,7 @@ export function getPortraitSpec(skin: FighterSkin): SpriteFrameDef {
     const first = MINION_BANKS[skin].idle[0];
     const sz = Math.min(46, first.w, first.h);
     return {
-      sheet: 'minionsSheet',
+      sheet: first.sheet,
       x: first.x + Math.max(0, Math.round(first.ax - sz * 0.45)),
       y: first.y + 2,
       w: sz,
@@ -1409,6 +1991,15 @@ export function getPortraitSpec(skin: FighterSkin): SpriteFrameDef {
         h: 54,
         ax: 27,
       };
+    case 'thalgrim':
+      return {
+        sheet: 'thalgrimBoss',
+        x: THALGRIM_COORDS.T_IDLE_0.x + 36,
+        y: THALGRIM_COORDS.T_IDLE_0.y + 2,
+        w: 54,
+        h: 54,
+        ax: 27,
+      };
     case 'vorgath':
       return {
         sheet: 'vorgathBoss',
@@ -1423,6 +2014,15 @@ export function getPortraitSpec(skin: FighterSkin): SpriteFrameDef {
         sheet: 'malakorBoss',
         x: MALAKOR_COORDS.M_IDLE_0.x + 28,
         y: MALAKOR_COORDS.M_IDLE_0.y + 4,
+        w: 54,
+        h: 54,
+        ax: 27,
+      };
+    case 'baelgor':
+      return {
+        sheet: 'baelgorBoss',
+        x: BAELGOR_COORDS.B_IDLE_0.x + 24,
+        y: BAELGOR_COORDS.B_IDLE_0.y + 4,
         w: 54,
         h: 54,
         ax: 27,
@@ -1512,10 +2112,26 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
       'Planche reconstruite zéro parasite : garde respirante à 4 poses, marche lourde, fendoir vertical 5 phases, moulinet horizontal à une seule hache double, parade, esquive basse 2 phases, saut, chute orientée, gisant et décapitation dédiée en 4 poses.',
   },
   {
+    id: 'boss_thalgrim',
+    category: 'bosses',
+    title: 'Thalgrim · Gardien des Profondeurs Cristallines',
+    roleLabel: 'Boss Acte II · Cavernes Cristallines',
+    dimensionsLabel: `${NEW_SHEET_META.thalgrimBoss.width} × ${NEW_SHEET_META.thalgrimBoss.height} px`,
+    frameCountLabel: `${NEW_SHEET_META.thalgrimBoss.count} sprites`,
+    colorKeyLabel: 'Fond #FF00FF (0xF81F)',
+    downloadUrl: `/sheets/planche_boss_thalgrim.png?${SHEET_CACHE_REV}`,
+    fileName: 'planche_boss_thalgrim.png',
+    cHeaderSymbol: 'SPRITE_BOSS_THALGRIM',
+    sheetKey: 'thalgrimBoss',
+    homeStage: 'caverns',
+    description:
+      'Seigneur runique des Cavernes Cristallines armé d’un marteau-cristal cyan : garde respirante 4 poses, marche lourde, fendoir runique, onde sismique cristalline, parade 3 poses, flexion basse, bond souterrain, gisant et décapitation dédiée.',
+  },
+  {
     id: 'boss_vorgath',
     category: 'bosses',
     title: 'Vorgath · Le Bourreau des Basaltes',
-    roleLabel: 'Boss Acte II · Cryptes d’Obsidienne',
+    roleLabel: 'Boss Acte III · Cryptes d’Obsidienne',
     dimensionsLabel: `${VERIFIED_SHEET_META.vorgathBoss.width} × ${VERIFIED_SHEET_META.vorgathBoss.height} px`,
     frameCountLabel: `${VERIFIED_SHEET_META.vorgathBoss.count} sprites`,
     colorKeyLabel: 'Fond #FF00FF (0xF81F)',
@@ -1531,7 +2147,7 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
     id: 'boss_malakor',
     category: 'bosses',
     title: 'Malakor · Champion Invaincu de la Fosse',
-    roleLabel: 'Boss Acte III · Arène des Ossements',
+    roleLabel: 'Boss Acte IV · Arène des Ossements',
     dimensionsLabel: `${VERIFIED_SHEET_META.malakorBoss.width} × ${VERIFIED_SHEET_META.malakorBoss.height} px`,
     frameCountLabel: `${VERIFIED_SHEET_META.malakorBoss.count} sprites`,
     colorKeyLabel: 'Fond #FF00FF (0xF81F)',
@@ -1544,10 +2160,26 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
       'Planche reconstruite zéro parasite à une seule épée dentelée : garde souple 4 poses, pas d’arène, tailles, estoc profond, parade, accroupissement 2 poses, vraie roulade 360° armée, saut aérien dédié, gisant et décapitation dédiée en 4 poses.',
   },
   {
+    id: 'boss_baelgor',
+    category: 'bosses',
+    title: 'Baelgor · Archonte des Brasiers Infernaux',
+    roleLabel: 'Boss Acte V · Citadelle des Brasiers',
+    dimensionsLabel: `${NEW_SHEET_META.baelgorBoss.width} × ${NEW_SHEET_META.baelgorBoss.height} px`,
+    frameCountLabel: `${NEW_SHEET_META.baelgorBoss.count} sprites`,
+    colorKeyLabel: 'Fond #FF00FF (0xF81F)',
+    downloadUrl: `/sheets/planche_boss_baelgor.png?${SHEET_CACHE_REV}`,
+    fileName: 'planche_boss_baelgor.png',
+    cHeaderSymbol: 'SPRITE_BOSS_BAELGOR',
+    sheetKey: 'baelgorBoss',
+    homeStage: 'inferno',
+    description:
+      'Seigneur de guerre infernal cornu brandissant son espadon de magma : garde ardente 4 poses, marche cuirassée, tailles et estocs flamboyants, roulade d’assaut 360°, saut volcanique, gisant et décapitation dédiée.',
+  },
+  {
     id: 'boss_drax',
     category: 'bosses',
     title: 'Seigneur Drax · Sorcier-Roi de la Citadelle',
-    roleLabel: 'Boss Final Acte IV · Sanctuaire Foudroyé',
+    roleLabel: 'Boss Final Acte VI · Sanctuaire Foudroyé',
     dimensionsLabel: `${VERIFIED_SHEET_META.draxBoss.width} × ${VERIFIED_SHEET_META.draxBoss.height} px`,
     frameCountLabel: `${VERIFIED_SHEET_META.draxBoss.count} sprites`,
     colorKeyLabel: 'Fond #FF00FF (0xF81F)',
@@ -1560,10 +2192,26 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
       'Planche reconstruite zéro parasite : présence royale respirante, marche à 5 pas, tailles runiques, invocation d’orbe noir épée en main, parade, vraie esquive accroupie au sol, bond d’ombre, KO gisant et décapitation dédiée en 4 poses.',
   },
   {
+    id: 'monsters_11_bestiary',
+    category: 'minions',
+    title: 'Planche Bestiaire des 11 Monstres de Campagne',
+    roleLabel: '11 Monstres Variés Répartis sur les 6 Actes (0 Texte Parasite)',
+    dimensionsLabel: `${NEW_SHEET_META.monsters11Sheet.width} × ${NEW_SHEET_META.monsters11Sheet.height} px`,
+    frameCountLabel: `${NEW_SHEET_META.monsters11Sheet.count} sprites (11 monstres)`,
+    colorKeyLabel: 'Fond #FF00FF (0xF81F)',
+    downloadUrl: `/sheets/planche_11_monstres.png?${SHEET_CACHE_REV}`,
+    fileName: 'planche_11_monstres.png',
+    cHeaderSymbol: 'SPRITE_MONSTERS_11',
+    sheetKey: 'monsters11Sheet',
+    homeStage: 'caverns',
+    description:
+      'Réunit 11 créatures pixel-art intégralement nettoyées de toute annotation texte : Gobelin Éclaireur, Orque Maraudeur, Guerrier Squelette, Zombie Putréfié, Loup Sinistre, Chauve-Souris Cavernicole, Spectre Hurlant, Mage Squelette, Hallebardier Impérial, Golem de Pierre et Démon Abyssal.',
+  },
+  {
     id: 'minions_zones',
     category: 'minions',
     title: 'Planche des 6 Sbires & Éclaireurs des Zones',
-    roleLabel: '6 Ennemis de Transition façon Double Dragon (1 à 5 coups)',
+    roleLabel: '6 Ennemis de Faction façon Double Dragon (1 à 5 coups)',
     dimensionsLabel: `${VERIFIED_SHEET_META.minionsSheet.width} × ${VERIFIED_SHEET_META.minionsSheet.height} px`,
     frameCountLabel: `${VERIFIED_SHEET_META.minionsSheet.count} sprites (6 × 21)`,
     colorKeyLabel: 'Fond #FF00FF (0xF81F)',
@@ -1573,35 +2221,67 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
     sheetKey: 'minionsSheet',
     homeStage: 'forest',
     description:
-      'Réunit les 6 adversaires de transition cohérents par région : Pillard Loup-Gris, Garde des Monolithes, Fanatique d’Obsidienne, Squelette Légionnaire, Écorcheur des Sables et Sentinelle Spectrale — chacun doté de 21 poses incluant KO et décapitation 4 poses.',
+      'Réunit les 6 adversaires de faction régionaux : Pillard Loup-Gris, Garde des Monolithes, Fanatique d’Obsidienne, Squelette Légionnaire, Écorcheur des Sables et Sentinelle Spectrale — chacun doté de 21 poses incluant KO et décapitation 4 poses.',
   },
   {
     id: 'zones_scrolling_atlas',
     category: 'stages',
-    title: 'Planche des 4 Niveaux Défilants de Transition (960×240)',
-    roleLabel: '4 Zones Beat-’em-up reliant les Arènes de Boss',
-    dimensionsLabel: '984 × 1032 px (4 × 960×240)',
-    frameCountLabel: '4 zones panoramiques',
+    title: 'Les 6 Panoramas Défilants Continus (1800×240)',
+    roleLabel: '6 Zones Narratives Sans Raccord Visible (Actes I à VI)',
+    dimensionsLabel: '6 × 1800 × 240 px',
+    frameCountLabel: '6 panoramas pixel-art continus',
     colorKeyLabel: 'RGB565 Défilement Horizontal',
-    downloadUrl: `/sheets/planche_zones_transition.png?${SHEET_CACHE_REV}`,
-    fileName: 'planche_zones_transition.png',
-    cHeaderSymbol: 'ZONE_SCROLL_ATLAS_960X240',
+    downloadUrl: `/sheets/panorama_acte1_foret.png?${SHEET_CACHE_REV}`,
+    fileName: 'panorama_acte1_foret.png',
+    cHeaderSymbol: 'PANO_ACT1..PANO_ACT6',
     description:
-      'Les 4 décors panoramiques 960×240 parcourus entre les boss : Sentier des Brumes & Menhirs (Acte I), Descente des Geôles de Basalte (Acte II), Couloir des Fauves & Gladiateurs (Acte III) et Pont Foudroyé de la Citadelle (Acte IV).',
+      'Les 6 fresques panoramiques continues 1800×240 d’un seul tenant : Clairières & Portail Runique (Acte I), Escalier & Cavernes Cristallines (Acte II), Ruines Souterraines & Cryptes de Lave (Acte III), Forteresse du Crépuscule & Colisée (Acte IV), Remparts Lunaires & Citadelle des Brasiers (Acte V) et Viaduc Noir & Sanctuaire de Drax (Acte VI).',
+    subDownloads: [
+      {
+        label: 'Acte I · Forêt & Portail (1800×240)',
+        url: '/sheets/panorama_acte1_foret.png',
+        fileName: 'panorama_acte1_foret.png',
+      },
+      {
+        label: 'Acte II · Cavernes Cristallines (1800×240)',
+        url: '/sheets/panorama_acte2_cavernes.png',
+        fileName: 'panorama_acte2_cavernes.png',
+      },
+      {
+        label: 'Acte III · Cryptes & Lave (1800×240)',
+        url: '/sheets/panorama_acte3_crypte.png',
+        fileName: 'panorama_acte3_crypte.png',
+      },
+      {
+        label: 'Acte IV · Remparts & Arène (1800×240)',
+        url: '/sheets/panorama_acte4_arene.png',
+        fileName: 'panorama_acte4_arene.png',
+      },
+      {
+        label: 'Acte V · Citadelle des Brasiers (1800×240)',
+        url: '/sheets/panorama_acte5_citadelle.png',
+        fileName: 'panorama_acte5_citadelle.png',
+      },
+      {
+        label: 'Acte VI · Sanctuaire de Drax (1800×240)',
+        url: '/sheets/panorama_acte6_sanctuaire.png',
+        fileName: 'panorama_acte6_sanctuaire.png',
+      },
+    ],
   },
   {
     id: 'stages_atlas',
     category: 'stages',
-    title: 'Planche des 4 Décors d’Arène (Atlas 2×2 · 320×240)',
-    roleLabel: '4 Décors Pixel-Art Natifs Écran TFT Gamebuino AKA',
-    dimensionsLabel: '640 × 480 px (4 × 320×240)',
-    frameCountLabel: '4 décors complets',
+    title: 'Planche des 6 Décors d’Arène (Atlas 3×2 · 320×240)',
+    roleLabel: '6 Arènes de Boss Natives Écran TFT Gamebuino AKA',
+    dimensionsLabel: '960 × 480 px (6 × 320×240)',
+    frameCountLabel: '6 décors complets',
     colorKeyLabel: 'RGB565 Plein Écran 320×240',
     downloadUrl: `/sheets/planche_decors_320x240.png?${SHEET_CACHE_REV}`,
     fileName: 'planche_decors_320x240.png',
     cHeaderSymbol: 'STAGE_ATLAS_320X240',
     description:
-      'Réunit à l’échelle exacte 1:1 les 4 arènes 320×240 des duels de boss : Clairières Cendrées, Cryptes d’Obsidienne, Arène des Ossements et Sanctuaire Foudroyé de Drax.',
+      'Réunit à l’échelle exacte 1:1 les 6 arènes 320×240 des duels de boss : Clairières Cendrées, Cavernes Cristallines, Cryptes d’Obsidienne, Arène des Ossements, Citadelle des Brasiers et Sanctuaire Foudroyé de Drax.',
     subDownloads: [
       {
         label: 'Acte I · Forêt (320×240)',
@@ -1609,19 +2289,29 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
         fileName: 'decor_acte1_foret_320x240.png',
       },
       {
-        label: 'Acte II · Crypte (320×240)',
-        url: '/sheets/decor_acte2_crypte_320x240.png',
-        fileName: 'decor_acte2_crypte_320x240.png',
+        label: 'Acte II · Cavernes (320×240)',
+        url: '/sheets/decor_acte2_cavernes_320x240.png',
+        fileName: 'decor_acte2_cavernes_320x240.png',
       },
       {
-        label: 'Acte III · Arène (320×240)',
-        url: '/sheets/decor_acte3_arene_320x240.png',
-        fileName: 'decor_acte3_arene_320x240.png',
+        label: 'Acte III · Crypte (320×240)',
+        url: '/sheets/decor_acte3_crypte_320x240.png',
+        fileName: 'decor_acte3_crypte_320x240.png',
       },
       {
-        label: 'Acte IV · Sanctuaire (320×240)',
-        url: '/sheets/decor_acte4_sanctuaire_320x240.png',
-        fileName: 'decor_acte4_sanctuaire_320x240.png',
+        label: 'Acte IV · Arène (320×240)',
+        url: '/sheets/decor_acte4_arene_320x240.png',
+        fileName: 'decor_acte4_arene_320x240.png',
+      },
+      {
+        label: 'Acte V · Citadelle (320×240)',
+        url: '/sheets/decor_acte5_citadelle_320x240.png',
+        fileName: 'decor_acte5_citadelle_320x240.png',
+      },
+      {
+        label: 'Acte VI · Sanctuaire (320×240)',
+        url: '/sheets/decor_acte6_sanctuaire_320x240.png',
+        fileName: 'decor_acte6_sanctuaire_320x240.png',
       },
     ],
   },
@@ -1644,7 +2334,7 @@ export const MASTER_SHEETS_CATALOG: MasterSheetCatalogEntry[] = [
 ];
 
 // ============================================================================
-// PRÉSENTATION DÉTAILLÉE DES ANIMATIONS PAR PERSONNAGE & SBIRES
+// PRÉSENTATION DÉTAILLÉE DES ANIMATIONS PAR PERSONNAGE & 17 MONSTRES
 // ============================================================================
 export interface CharacterAnimationSequenceSpec {
   id: string;
@@ -1662,15 +2352,12 @@ export interface CharacterAnimationDossier {
     | 'krom'
     | 'rival_aka'
     | 'gorgar'
+    | 'thalgrim'
     | 'vorgath'
     | 'malakor'
+    | 'baelgor'
     | 'drax'
-    | 'wolf_raider'
-    | 'monolith_spearman'
-    | 'cult_acolyte'
-    | 'crypt_skeleton'
-    | 'pit_thrall'
-    | 'drax_acolyte'
+    | MinionSkin
     | 'goblin'
     | 'stage_fx';
   name: string;
@@ -1700,21 +2387,21 @@ function buildMinionDossier(
     weaponSummary,
     outfitSummary,
     evasionDoctrine:
-      'Éclaireur de zone conçu pour le plaisir du combat arcade : garde lisible, esquive accroupie simple et décapitation spectaculaire en 4 poses.',
+      'Adversaire de traversée conçu pour le rythme beat-’em-up : garde lisible, attaques télégraphiées et chute/décapitation dédiées.',
     hasAcrobaticRoll: false,
     stage,
     skin,
     sequences: [
-      { id: 'idle', label: 'Garde d’Éclaireur', inputHint: 'Patrouille', ticksPerFrame: 12, notes: '2 poses respirantes bien campées sur le sentier.', frames: b.idle },
-      { id: 'walk_fwd', label: 'Approche en Zone', inputHint: 'IA Marche', ticksPerFrame: 8, notes: '4 pas fluides d’encerclement façon Double Dragon.', frames: b.walk },
-      { id: 'slash_high', label: 'Attaque Télégraphiée', inputHint: 'IA Frappe', ticksPerFrame: 8, notes: '4 phases lisibles laissant à Krom le temps de parer ou trancher.', frames: b.slash },
-      { id: 'sweep_low', label: 'Fente Basse', inputHint: 'IA Basse', ticksPerFrame: 8, notes: 'Engagement bas en 4 étapes.', frames: b.sweep },
-      { id: 'block_high', label: 'Garde Courte', inputHint: 'IA Défense', ticksPerFrame: 10, notes: 'Parade brève que le Fendoir ou le Balayage ouvre aisément.', frames: b.block },
-      { id: 'crouch', label: 'Flexion Basse', inputHint: 'IA Esquive', ticksPerFrame: 10, isRollOrEvade: true, notes: 'Posture basse compacte sur le sentier.', frames: b.crouch },
-      { id: 'hit_stun', label: 'Impact Subi', inputHint: '1 à 5 coups', ticksPerFrame: 9, notes: 'Recul net sous le glaive de Krom.', frames: b.hit },
-      { id: 'dead', label: 'Chute & KO', inputHint: 'PV à 0', ticksPerFrame: 9, notes: 'Effondrement complet sur la chaussée.', frames: b.dead },
-      { id: 'gisant', label: 'Sbire Gisant', inputHint: 'Au sol', ticksPerFrame: 14, notes: 'Corps étendu au sol avant disparition.', frames: b.gisant },
-      { id: 'decapitated', label: 'Décapitation Subie (+300 PTS)', inputHint: 'Moulinet C', ticksPerFrame: 10, notes: '4 poses dédiées sans tête avec projection cramoisie et bonus de score !', frames: b.decapitated },
+      { id: 'idle', label: 'Garde / Patrouille', inputHint: 'Patrouille', ticksPerFrame: 12, notes: 'Posture d’attente respirante sur la chaussée.', frames: b.idle },
+      { id: 'walk_fwd', label: 'Approche en Zone', inputHint: 'IA Marche', ticksPerFrame: 8, notes: 'Cycle de déplacement vers Krom.', frames: b.walk },
+      { id: 'slash_high', label: 'Attaque Principale', inputHint: 'IA Frappe', ticksPerFrame: 8, notes: 'Attaque télégraphiée laissant l’ouverture à la parade L1 ou à l’esquive.', frames: b.slash },
+      { id: 'sweep_low', label: 'Assaut Bas', inputHint: 'IA Basse', ticksPerFrame: 8, notes: 'Engagement bas forçant la mobilité.', frames: b.sweep },
+      { id: 'block_high', label: 'Garde Courte', inputHint: 'IA Défense', ticksPerFrame: 10, notes: 'Défense brève que le Fendoir ou le Balayage ouvre.', frames: b.block },
+      { id: 'crouch', label: 'Posture Basse', inputHint: 'IA Esquive', ticksPerFrame: 10, isRollOrEvade: true, notes: 'Flexion compacte.', frames: b.crouch },
+      { id: 'hit_stun', label: 'Impact Subi', inputHint: 'Dégâts', ticksPerFrame: 9, notes: 'Recul sous le glaive de Krom.', frames: b.hit },
+      { id: 'dead', label: 'Chute & KO', inputHint: 'PV à 0', ticksPerFrame: 9, notes: 'Effondrement complet sur les dalles.', frames: b.dead },
+      { id: 'gisant', label: 'Corps Gisant', inputHint: 'Au sol', ticksPerFrame: 14, notes: 'Étendu au sol avant disparition.', frames: b.gisant },
+      { id: 'decapitated', label: 'Exécution Fatale (+300 PTS)', inputHint: 'Moulinet C', ticksPerFrame: 10, notes: 'Séquence d’exécution fatale avec bonus de score arcade !', frames: b.decapitated },
     ],
   };
 }
@@ -1723,7 +2410,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   {
     actorId: 'krom',
     name: 'Krom le Barbare · Joueur 1',
-    subtitle: 'Héros jouable · Campagne (Zones + Boss) & Duel Local',
+    subtitle: 'Héros jouable · Campagne 6 Actes (Zones + Boss) & Duel Local',
     weaponSummary: 'Glaive d’acier lourd à deux mains (unique sur les 43 poses, zéro résidu voisin)',
     outfitSummary: 'Baudrier de cuir croisé, ceinture à crâne d’argent, pagne de fourrure brune et bottes fourrées',
     evasionDoctrine:
@@ -1735,7 +2422,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
       { id: 'idle', label: 'Garde Neutre', inputHint: 'Repos', ticksPerFrame: 14, notes: '4 poses exclusives avec flexion de jambes et respiration nettes.', frames: KROM_IDLE },
       { id: 'walk_fwd', label: 'Marche d’Approche', inputHint: '← / →', ticksPerFrame: 9, notes: 'Cycle épuré aux 4 pas distincts.', frames: KROM_WALK },
       { id: 'slash_high', label: 'Taille Haute', inputHint: 'Bouton A', ticksPerFrame: 8, notes: 'Préparation, levée, grand arc horizontal, allonge et retour fluide.', frames: KROM_SLASH_HIGH },
-      { id: 'spin_decap', label: 'Moulinet Décapitant 360°', inputHint: 'Bouton C', ticksPerFrame: 8, notes: 'Pivot complet à 360° fauchant simultanément les sbires à portée ou décapitant le boss.', frames: KROM_SPIN_DECAP },
+      { id: 'spin_decap', label: 'Moulinet Décapitant 360°', inputHint: 'Bouton C', ticksPerFrame: 8, notes: 'Pivot complet à 360° fauchant simultanément les monstres à portée ou décapitant le boss.', frames: KROM_SPIN_DECAP },
       { id: 'thrust_mid', label: 'Fente d’Estoc', inputHint: 'Avant + A', ticksPerFrame: 8, notes: 'Poses réordonnées avec retour en garde propre.', frames: KROM_THRUST_MID },
       { id: 'sweep_low', label: 'Balayage Bas', inputHint: 'Bas + A / B', ticksPerFrame: 8, notes: 'Flexion basse, fente rasante, fauchage bas et reprise d’appui.', frames: KROM_SWEEP_LOW },
       { id: 'cleave_overhead', label: 'Fendoir Brise-Garde', inputHint: 'R1 / Haut + A', ticksPerFrame: 8, notes: 'Mouvement continu en 5 phases du haut vers le sol.', frames: KROM_CLEAVE_OVERHEAD },
@@ -1813,8 +2500,35 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
     ],
   },
   {
+    actorId: 'thalgrim',
+    name: 'Thalgrim · Boss Acte II',
+    subtitle: 'Boss des Cavernes Cristallines · Gardien Runique',
+    weaponSummary: 'Marteau de guerre serti de cristal cyan sur les 34 poses (0 parasite)',
+    outfitSummary: 'Barbe tressée d’argent, armure runique sombre incrustée de gemmes bleues',
+    evasionDoctrine:
+      'Rempart minéral : flexion basse à 3 poses sous les tailles hautes et saut d’impact brise-roche.',
+    hasAcrobaticRoll: false,
+    stage: 'caverns',
+    skin: 'thalgrim',
+    sequences: [
+      { id: 'idle', label: 'Veille Cristalline', inputHint: 'IA Repos', ticksPerFrame: 12, notes: '4 poses respirantes marteau runique en main.', frames: THALGRIM_IDLE },
+      { id: 'walk_fwd', label: 'Pas Souterrain', inputHint: 'IA Approche', ticksPerFrame: 8, notes: '4 pas lourds faisant vibrer la roche.', frames: THALGRIM_WALK },
+      { id: 'cleave_overhead', label: 'Fracas de Cristal', inputHint: 'Attaque Haute', ticksPerFrame: 8, notes: '4 phases d’impact runique descendant.', frames: THALGRIM_CLEAVE },
+      { id: 'boss_cast', label: 'Onde Sismique Cyan', inputHint: 'Spécial Boss', ticksPerFrame: 8, notes: 'Frappe la dalle et projette une onde cristalline au ras du sol.', frames: THALGRIM_CAST },
+      { id: 'sweep_low', label: 'Balayage Minéral', inputHint: 'Attaque Basse', ticksPerFrame: 8, notes: '4 poses de fauchage horizontal lourd.', frames: THALGRIM_SWEEP },
+      { id: 'block_high', label: 'Rempart Runique', inputHint: 'Défense IA', ticksPerFrame: 10, notes: '3 poses de garde renforcée.', frames: THALGRIM_BLOCK },
+      { id: 'crouch', label: 'Ancrage Bas', inputHint: 'Esquive Haute', ticksPerFrame: 10, isRollOrEvade: true, notes: '3 poses d’accroupissement lourd.', frames: THALGRIM_CROUCH },
+      { id: 'jump', label: 'Bond Brise-Voûte', inputHint: 'Esquive Basse', ticksPerFrame: 8, isJump: true, notes: '4 poses de saut massif.', frames: THALGRIM_JUMP },
+      { id: 'hit_stun', label: 'Recul Sous Choc', inputHint: 'Dégâts', ticksPerFrame: 9, notes: 'Encaissement lourd.', frames: THALGRIM_HIT },
+      { id: 'dead', label: 'Effondrement & KO', inputHint: 'PV à 0', ticksPerFrame: 10, notes: '4 étapes jusqu’au KO.', frames: THALGRIM_DEAD },
+      { id: 'gisant', label: 'Gardien Gisant', inputHint: 'Étendu au sol', ticksPerFrame: 16, notes: 'Thalgrim étendu parmi les cristaux.', frames: THALGRIM_GISANT },
+      { id: 'decapitated', label: 'Décapitation Subie', inputHint: 'Coup fatal C', ticksPerFrame: 11, notes: 'Exécution fatale sans tête jusqu’au gisant.', frames: THALGRIM_DECAPITATED },
+      { id: 'victory', label: 'Serment des Profondeurs', inputHint: 'Victoire Boss', ticksPerFrame: 11, notes: 'Marteau runique brandi vers la voûte.', frames: THALGRIM_VICTORY },
+    ],
+  },
+  {
     actorId: 'vorgath',
-    name: 'Vorgath · Boss Acte II',
+    name: 'Vorgath · Boss Acte III',
     subtitle: 'Boss des Cryptes d’Obsidienne · Bourreau des Basaltes',
     weaponSummary: 'Couperet rectangulaire d’obsidienne constant sur les 32 poses (0 parasite)',
     outfitSummary: 'Capuche noire à yeux rouges, épaulières à pointes, tabard noir bordé de rouge',
@@ -1841,12 +2555,12 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   },
   {
     actorId: 'malakor',
-    name: 'Malakor · Boss Acte III',
+    name: 'Malakor · Boss Acte IV',
     subtitle: 'Boss de l’Arène des Ossements · Gladiateur Acrobate',
     weaponSummary: 'Une seule épée dentelée de gladiateur sur les 36 poses (0 parasite)',
     outfitSummary: 'Crinière rouge, épaulière d’or, pagne cramoisi, genouillères dorées',
     evasionDoctrine:
-      'Seul boss agile doté d’une vraie roulade avant 360° en 4 poses + saut aérien dédié.',
+      'Gladiateur agile doté d’une vraie roulade avant 360° en 4 poses + saut aérien dédié.',
     hasAcrobaticRoll: true,
     stage: 'arena',
     skin: 'malakor',
@@ -1868,8 +2582,36 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
     ],
   },
   {
+    actorId: 'baelgor',
+    name: 'Baelgor · Boss Acte V',
+    subtitle: 'Boss de la Citadelle des Brasiers · Archonte Infernal',
+    weaponSummary: 'Espadon dentelé de magma incandescent sur les 32 poses (0 parasite)',
+    outfitSummary: 'Heaume démonique cornu, armure noire sillonnée de braises et cape écarlate',
+    evasionDoctrine:
+      'Seigneur de guerre agressif : roulade cuirassée 360° en 4 poses + bond volcanique.',
+    hasAcrobaticRoll: true,
+    stage: 'inferno',
+    skin: 'baelgor',
+    sequences: [
+      { id: 'idle', label: 'Garde des Brasiers', inputHint: 'IA Repos', ticksPerFrame: 11, notes: '4 poses ardentes espadon au poing.', frames: BAELGOR_IDLE },
+      { id: 'walk_fwd', label: 'Marche Infernale', inputHint: 'IA Approche', ticksPerFrame: 8, notes: '4 pas lourds sur la pierre calcinée.', frames: BAELGOR_WALK },
+      { id: 'slash_high', label: 'Tailles de Magma', inputHint: 'Combo Ardent', ticksPerFrame: 7, notes: 'Grand arc flamboyant à deux mains.', frames: BAELGOR_SLASH },
+      { id: 'thrust_mid', label: 'Estoc Incandescent', inputHint: 'Fente Longue', ticksPerFrame: 7, notes: 'Pointe brûlante projetée à pleine allonge.', frames: BAELGOR_THRUST },
+      { id: 'boss_cast', label: 'Comète de Brasier', inputHint: 'Spécial Boss', ticksPerFrame: 8, notes: 'Projette un orbe de feu infernal à hauteur de torse.', frames: BAELGOR_CAST },
+      { id: 'sweep_low', label: 'Fauchage de Braise', inputHint: 'Attaque Basse', ticksPerFrame: 7, notes: 'Revers rasant balayant la chaussée.', frames: BAELGOR_SWEEP },
+      { id: 'block_high', label: 'Garde de Fer Noir', inputHint: 'Défense IA', ticksPerFrame: 10, notes: '2 poses de parade lourde.', frames: BAELGOR_BLOCK },
+      { id: 'roll_fwd', label: 'Roulade Infernale 360°', inputHint: 'Charge IA', ticksPerFrame: 7, isRollOrEvade: true, notes: '4 poses de roulade offensive.', frames: BAELGOR_ROLL },
+      { id: 'jump', label: 'Saut Volcanique', inputHint: 'Esquive Basse', ticksPerFrame: 8, isJump: true, notes: '4 poses d’élévation ardente.', frames: BAELGOR_JUMP },
+      { id: 'hit_stun', label: 'Choc Subi', inputHint: 'Dégâts', ticksPerFrame: 8, notes: 'Recul sous l’acier de Krom.', frames: BAELGOR_HIT },
+      { id: 'dead', label: 'Chute & KO', inputHint: 'PV à 0', ticksPerFrame: 10, notes: '4 étapes jusqu’au KO complet.', frames: BAELGOR_DEAD },
+      { id: 'gisant', label: 'Archonte Gisant', inputHint: 'Étendu au sol', ticksPerFrame: 16, notes: 'Baelgor vaincu devant la herse ardente.', frames: BAELGOR_GISANT },
+      { id: 'decapitated', label: 'Décapitation Subie', inputHint: 'Coup fatal C', ticksPerFrame: 11, notes: 'Heaume cornu tranché net jusqu’au gisant !', frames: BAELGOR_DECAPITATED },
+      { id: 'victory', label: 'Rugissement du Brasier', inputHint: 'Victoire Boss', ticksPerFrame: 11, notes: 'Espadon dressé dans les flammes.', frames: BAELGOR_VICTORY },
+    ],
+  },
+  {
     actorId: 'drax',
-    name: 'Seigneur Drax · Boss Acte IV',
+    name: 'Seigneur Drax · Boss Acte VI',
     subtitle: 'Boss Final du Sanctuaire Foudroyé · Sorcier-Roi',
     weaponSummary: 'Grande épée runique violette présente sur les 35 poses (0 parasite)',
     outfitSummary: 'Couronne d’or, visage spectral, armure d’améthyste à pointes, cape cramoisie',
@@ -1894,6 +2636,94 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
     ],
   },
   buildMinionDossier(
+    'goblin_scout',
+    'Gobelin Éclaireur · Monstre Actes I–II',
+    'Pillard Agile · 18 PV (1 à 2 coups) · +140 PTS',
+    'Coutelas recourbé & rondache de bois',
+    'Peau verte, casque pointu et pagne de cuir',
+    'forest'
+  ),
+  buildMinionDossier(
+    'dire_wolf',
+    'Loup Sinistre · Monstre Acte I',
+    'Fauve des Brumes · 24 PV (1 à 2 coups) · +210 PTS',
+    'Crocs acérés & bond sauvage',
+    'Pelage gris-noir hérissé et yeux rouges',
+    'forest'
+  ),
+  buildMinionDossier(
+    'cave_bat',
+    'Chauve-Souris Géante · Monstre Acte II',
+    'Prédateur Aérien · 18 PV (1 à 2 coups) · +190 PTS',
+    'Piqué griffu en vol rasant',
+    'Ailes membraneuses sombres et yeux écarlates',
+    'caverns'
+  ),
+  buildMinionDossier(
+    'orc_marauder',
+    'Orque Maraudeur · Monstre Actes II & IV',
+    'Brute de Choc · 42 PV (3 coups) · +320 PTS',
+    'Massue cloutée massive',
+    'Cuirasse tribale à pointes et musculature verte',
+    'caverns'
+  ),
+  buildMinionDossier(
+    'stone_golem',
+    'Golem de Pierre · Monstre Actes II & IV',
+    'Colosse Minéral · 66 PV (4 à 5 coups) · +520 PTS',
+    'Poings monolithiques brise-dalles',
+    'Granit moussu gravé d’un cœur runique cyan',
+    'caverns'
+  ),
+  buildMinionDossier(
+    'risen_zombie',
+    'Zombie Putréfié · Monstre Acte III',
+    'Captif Réanimé · 32 PV (2 coups) · +240 PTS',
+    'Griffes nécrotiques',
+    'Haillons de cachot et chair blême',
+    'crypt'
+  ),
+  buildMinionDossier(
+    'undead_warrior',
+    'Guerrier Squelette · Monstre Acte III',
+    'Fantassin d’Os · 34 PV (2 à 3 coups) · +280 PTS',
+    'Épée droite & bouclier ferré',
+    'Ossements ivoire et baudrier rouge',
+    'crypt'
+  ),
+  buildMinionDossier(
+    'imperial_halberdier',
+    'Hallebardier Impérial · Monstre Actes IV–V',
+    'Garde Lourd · 46 PV (3 à 4 coups) · +390 PTS',
+    'Hallebarde d’acier & grand écu rouge',
+    'Armure de plates complète et tabard impérial',
+    'arena'
+  ),
+  buildMinionDossier(
+    'skeleton_mage',
+    'Mage Squelette · Monstre Actes V–VI',
+    'Arcaniste du Feu Noir · 38 PV (2 à 3 coups) · +360 PTS',
+    'Bâton solaire & trait de feu',
+    'Robe pourpre brodée d’or',
+    'inferno'
+  ),
+  buildMinionDossier(
+    'abyssal_demon',
+    'Démon Abyssal · Monstre Actes V–VI',
+    'Exécuteur Ailé · 60 PV (4 à 5 coups) · +540 PTS',
+    'Lame ardente des brasiers',
+    'Ailes de cuir cramoisi et cornes noires',
+    'inferno'
+  ),
+  buildMinionDossier(
+    'spectral_wraith',
+    'Spectre Hurlant · Monstre Acte VI',
+    'Âme Damnée de Drax · 52 PV (3 à 4 coups) · +460 PTS',
+    'Lame ectoplasmique glaciale',
+    'Suaire éthéré cyan flottant au-dessus des dalles',
+    'sanctuary'
+  ),
+  buildMinionDossier(
     'wolf_raider',
     'Pillard Loup-Gris · Sbire Acte I',
     'Éclaireur des Brumes · 20 PV (1 à 2 coups) · +150 PTS',
@@ -1911,7 +2741,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   ),
   buildMinionDossier(
     'cult_acolyte',
-    'Fanatique d’Obsidienne · Sbire Actes II & IV',
+    'Fanatique d’Obsidienne · Sbire Actes III & V',
     'Zélote du Feu Noir · 24 PV (1 à 2 coups) · +200 PTS',
     'Fendoir rituel volcanique',
     'Capuche cramoisie, yeux d’ambre incandescent et robe de basalte sans armure lourde',
@@ -1919,7 +2749,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   ),
   buildMinionDossier(
     'crypt_skeleton',
-    'Squelette Légionnaire · Sbire Actes II–III',
+    'Squelette Légionnaire · Sbire Acte III',
     'Guerrier d’Os Réanimé · 36 PV (2 à 3 coups) · +300 PTS',
     'Lame antique ébréchée',
     'Crâne ivoire aux orbites creuses, cage thoracique apparente et lambeaux d’armure rouillée',
@@ -1927,7 +2757,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   ),
   buildMinionDossier(
     'pit_thrall',
-    'Écorcheur des Sables · Sbire Actes III–IV',
+    'Écorcheur des Sables · Sbire Acte IV',
     'Gladiateur de la Fosse · 48 PV (3 à 4 coups) · +400 PTS',
     'Sabre dentelé d’arène',
     'Cimier de bronze, épaulière cuivrée et ceinture turquoise de Sang-Sable',
@@ -1935,7 +2765,7 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   ),
   buildMinionDossier(
     'drax_acolyte',
-    'Sentinelle Spectrale · Sbire Acte IV',
+    'Sentinelle Spectrale · Sbire Acte VI',
     'Garde d’Ombre du Pont Foudroyé · 64 PV (4 à 5 coups) · +550 PTS',
     'Épée d’ombre chargée de foudre cyan',
     'Heaume spectral sans couronne royale, armure ardoise et runes électriques bleues',
@@ -1959,20 +2789,20 @@ export const CHARACTER_ANIMATION_DOSSIERS: CharacterAnimationDossier[] = [
   {
     actorId: 'stage_fx',
     name: 'Décors & Effets Animés',
-    subtitle: 'Éléments Dynamiques 60 Hz Superposés aux Arènes & Zones',
+    subtitle: 'Éléments Dynamiques 60 Hz Superposés aux 6 Arènes & Zones',
     weaponSummary: 'Projectiles magiques & étincelles de choc d’acier',
     outfitSummary: 'Détourage propre sur fond #FF00FF pur (zéro halo rose)',
-    evasionDoctrine: 'Animent en temps réel la forêt, la crypte, le colisée et le sanctuaire.',
+    evasionDoctrine: 'Animent en temps réel les 6 actes de la campagne.',
     hasAcrobaticRoll: false,
     stage: 'crypt',
     sequences: [
-      { id: 'fx_torch', label: 'Torche Murale', inputHint: 'Crypte', ticksPerFrame: 5, notes: '6 poses de flamme vive sans disque rose.', frames: FX_TORCH_FRAMES },
-      { id: 'fx_brazier', label: 'Brasero d’Arène', inputHint: 'Colisée', ticksPerFrame: 5, notes: '4 poses de vasque ardente.', frames: FX_BRAZIER_FRAMES },
-      { id: 'fx_monolith', label: 'Monolithe Runique', inputHint: 'Clairières', ticksPerFrame: 9, notes: '4 niveaux d’illumination des gravures.', frames: FX_MONOLITH_FRAMES },
-      { id: 'fx_fireball', label: 'Orbe de Feu Noir', inputHint: 'Sort de Drax', ticksPerFrame: 5, notes: '2 poses de comète arcanique.', frames: FX_FIREBALL_FRAMES },
+      { id: 'fx_torch', label: 'Torche Murale', inputHint: 'Cavernes & Crypte', ticksPerFrame: 5, notes: '6 poses de flamme vive sans disque rose.', frames: FX_TORCH_FRAMES },
+      { id: 'fx_brazier', label: 'Brasero d’Arène', inputHint: 'Colisée & Citadelle', ticksPerFrame: 5, notes: '4 poses de vasque ardente.', frames: FX_BRAZIER_FRAMES },
+      { id: 'fx_monolith', label: 'Monolithe Runique', inputHint: 'Clairières & Cavernes', ticksPerFrame: 9, notes: '4 niveaux d’illumination des gravures.', frames: FX_MONOLITH_FRAMES },
+      { id: 'fx_fireball', label: 'Orbe de Feu Noir', inputHint: 'Sort de Boss', ticksPerFrame: 5, notes: '2 poses de comète arcanique.', frames: FX_FIREBALL_FRAMES },
       { id: 'fx_sparks', label: 'Étincelles de Parade', inputHint: 'Choc L1', ticksPerFrame: 4, notes: '4 éclats d’acier lors des parades.', frames: FX_SPARK_FRAMES },
-      { id: 'fx_crow', label: 'Corbeau Noir', inputHint: 'Ciel Acte I', ticksPerFrame: 6, notes: '4 poses de battement d’ailes.', frames: FX_CROW_FRAMES },
-      { id: 'fx_lava', label: 'Lave en Fusion', inputHint: 'Fosse Acte II', ticksPerFrame: 8, notes: '4 étapes d’ébullition magmatique.', frames: FX_LAVA_FRAMES },
+      { id: 'fx_crow', label: 'Corbeau Noir', inputHint: 'Ciel Actes I & IV', ticksPerFrame: 6, notes: '4 poses de battement d’ailes.', frames: FX_CROW_FRAMES },
+      { id: 'fx_lava', label: 'Lave en Fusion', inputHint: 'Fosse Actes III & V', ticksPerFrame: 8, notes: '4 étapes d’ébullition magmatique.', frames: FX_LAVA_FRAMES },
     ],
   },
 ];

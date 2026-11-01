@@ -1,29 +1,44 @@
 import stageForestUrl from '../assets/images/stage_forest_pixel_1793121003697.jpg';
+import stageCavernsUrl from '../assets/images/stage_caverns_arena_1793402526129.jpg';
 import stageCryptUrl from '../assets/images/stage_crypt_pixel_1793121006436.jpg';
 import stageArenaUrl from '../assets/images/stage_arena_pixel_1793121009126.jpg';
+import stageInfernoUrl from '../assets/images/stage_inferno_arena_1793402530359.jpg';
 import stageSanctuaryUrl from '../assets/images/stage_sanctuary_pixel_1793121025789.jpg';
-import zone1TrailUrl from '../assets/images/zone1_misty_monolith_trail_1793183421592.jpg';
-import zone2CryptUrl from '../assets/images/zone2_obsidian_crypt_descent_1793183422836.jpg';
-import zone3TunnelUrl from '../assets/images/zone3_gladiator_bone_tunnel_1793183425359.jpg';
-import zone4BridgeUrl from '../assets/images/zone4_storm_citadel_bridge_1793183427257.jpg';
+import zone1BastionUrl from '../assets/images/zone1_nordic_wall_bastion_1793396239379.jpg';
+import zone2BastionUrl from '../assets/images/zone2_crypt_wall_bastion_1793396242672.jpg';
+import zone3BastionUrl from '../assets/images/zone3_arena_wall_bastion_1793396244640.jpg';
+import zone4BastionUrl from '../assets/images/zone4_citadel_wall_bastion_1793396248276.jpg';
 import storyInterludeUrl from '../assets/images/story_interlude_chronicle_art_1793183427577.jpg';
 import type { StageId } from '../types/game';
 import { NATIVE_HEIGHT, NATIVE_WIDTH } from './combatEngine';
 
-export const ZONE_WORLD_WIDTH = 960;
+export const ZONE_WORLD_WIDTH = 1800;
 
 export const STAGE_IMAGE_URLS: Record<StageId, string> = {
   forest: stageForestUrl,
+  caverns: stageCavernsUrl,
   crypt: stageCryptUrl,
   arena: stageArenaUrl,
+  inferno: stageInfernoUrl,
   sanctuary: stageSanctuaryUrl,
 };
 
+export const ZONE_BASTION_IMAGE_URLS: Record<StageId, string> = {
+  forest: zone1BastionUrl,
+  caverns: stageCavernsUrl,
+  crypt: zone2BastionUrl,
+  arena: zone3BastionUrl,
+  inferno: stageInfernoUrl,
+  sanctuary: zone4BastionUrl,
+};
+
 export const ZONE_SCROLL_IMAGE_URLS: Record<StageId, string> = {
-  forest: zone1TrailUrl,
-  crypt: zone2CryptUrl,
-  arena: zone3TunnelUrl,
-  sanctuary: zone4BridgeUrl,
+  forest: '/sheets/panorama_acte1_foret.png?v16',
+  caverns: '/sheets/panorama_acte2_cavernes.png?v16',
+  crypt: '/sheets/panorama_acte3_crypte.png?v16',
+  arena: '/sheets/panorama_acte4_arene.png?v16',
+  inferno: '/sheets/panorama_acte5_citadelle.png?v16',
+  sanctuary: '/sheets/panorama_acte6_sanctuaire.png?v16',
 };
 
 const stageCanvasCache: Partial<Record<StageId, HTMLCanvasElement>> = {};
@@ -56,12 +71,24 @@ function bakeRgb565Canvas(
   const d = imgData.data;
   for (let i = 0; i < d.length; i += 4) {
     const py = Math.floor(i / 4 / targetW);
-    const shade = py < dimUpperY ? 0.91 : 1.0;
+    const shade = py < dimUpperY ? 0.92 : 1.0;
     d[i] = quantizeChannel(d[i] * shade, 32);
     d[i + 1] = quantizeChannel(d[i + 1] * shade, 64);
     d[i + 2] = quantizeChannel(d[i + 2] * shade, 32);
   }
   ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+function bakeDirectPanoramaCanvas(img: HTMLImageElement): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = ZONE_WORLD_WIDTH;
+  canvas.height = NATIVE_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, ZONE_WORLD_WIDTH, NATIVE_HEIGHT);
   return canvas;
 }
 
@@ -80,39 +107,23 @@ export function ensureStageArtLoaded(): void {
   });
 
   (Object.keys(ZONE_SCROLL_IMAGE_URLS) as StageId[]).forEach((stage) => {
-    const zImg = new Image();
-    zImg.decoding = 'async';
-    zImg.onload = () => {
-      // Build seamless 960x240 scrolling strip (2x mirrored/blended 480x240 16:9 pixel-art tiles)
-      if (typeof document === 'undefined') return;
-      const raw = document.createElement('canvas');
-      raw.width = ZONE_WORLD_WIDTH;
-      raw.height = NATIVE_HEIGHT;
-      const rctx = raw.getContext('2d');
-      if (!rctx) return;
-      rctx.imageSmoothingEnabled = false;
-      // Draw 3 panoramic segments (426 + 426 + 426 cropped/tiled cleanly across 960x240)
-      rctx.drawImage(zImg, 0, 0, 480, NATIVE_HEIGHT);
-      rctx.save();
-      rctx.translate(960, 0);
-      rctx.scale(-1, 1);
-      rctx.drawImage(zImg, 0, 0, 480, NATIVE_HEIGHT);
-      rctx.restore();
-
-      // Ground path continuity band so the walkable stone/earth floor reads clearly at y=196..240
-      const imgData = rctx.getImageData(0, 0, ZONE_WORLD_WIDTH, NATIVE_HEIGHT);
-      const d = imgData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const py = Math.floor(i / 4 / ZONE_WORLD_WIDTH);
-        const shade = py < 180 ? 0.88 : py > 196 ? 0.94 : 1.0;
-        d[i] = quantizeChannel(d[i] * shade, 32);
-        d[i + 1] = quantizeChannel(d[i + 1] * shade, 64);
-        d[i + 2] = quantizeChannel(d[i + 2] * shade, 32);
-      }
-      rctx.putImageData(imgData, 0, 0);
-      zoneScrollCanvasCache[stage] = raw;
+    const pImg = new Image();
+    pImg.decoding = 'async';
+    pImg.onload = () => {
+      const baked = bakeDirectPanoramaCanvas(pImg);
+      if (baked) zoneScrollCanvasCache[stage] = baked;
     };
-    zImg.src = ZONE_SCROLL_IMAGE_URLS[stage];
+    pImg.onerror = () => {
+      // Resilient fallback using the generated 16-bit bastion panorama asset
+      const fbImg = new Image();
+      fbImg.decoding = 'async';
+      fbImg.onload = () => {
+        const baked = bakeRgb565Canvas(fbImg, ZONE_WORLD_WIDTH, NATIVE_HEIGHT, 182);
+        if (baked) zoneScrollCanvasCache[stage] = baked;
+      };
+      fbImg.src = ZONE_BASTION_IMAGE_URLS[stage];
+    };
+    pImg.src = ZONE_SCROLL_IMAGE_URLS[stage];
   });
 
   const sImg = new Image();

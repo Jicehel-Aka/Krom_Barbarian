@@ -6,11 +6,14 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { STAGE_ZONE_CONFIGS } from './src/data/zoneWaves.ts';
 import {
   createInitialMatch,
+  createZoneTraversal,
   EMPTY_INPUT,
   resetForNextRound,
   stepMatch,
+  stepZoneTraversal,
 } from './src/game/combatEngine.ts';
 import type {
   FighterAction,
@@ -18,20 +21,39 @@ import type {
   MatchState,
   MultiplayerRoomSummary,
   StageId,
+  ZoneTraversalState,
 } from './src/types/game.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const VALID_STAGES: readonly StageId[] = [
+  'forest',
+  'caverns',
+  'crypt',
+  'arena',
+  'inferno',
+  'sanctuary',
+];
+
+function sanitizeStage(raw: unknown): StageId {
+  if (typeof raw === 'string' && (VALID_STAGES as readonly string[]).includes(raw)) {
+    return raw as StageId;
+  }
+  return 'forest';
+}
+
 interface RoomSession {
   roomCode: string;
   stage: StageId;
+  roomMode: 'versus' | 'coop';
   createdAt: number;
   pcSocket: WebSocket | null;
   akaSocket: WebSocket | null;
   p1Input: InputState;
   p2Input: InputState;
   match: MatchState;
+  coopZone: ZoneTraversalState;
   roundCooldown: number;
 }
 
@@ -171,10 +193,32 @@ function generateRoomCode(): string {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
 
-function createRoomSession(roomCode: string, stage: StageId = 'arena'): RoomSession {
+function createCoopZoneForStage(stage: StageId): ZoneTraversalState {
+  const cfg = STAGE_ZONE_CONFIGS[stage] ?? STAGE_ZONE_CONFIGS.forest;
+  return createZoneTraversal({
+    stage,
+    actIndex: cfg.actIndex,
+    zoneTitle: cfg.zoneTitle,
+    waves: cfg.waves,
+    initialScore: 0,
+    p1MaxHp: 120,
+    p1MaxStamina: 112,
+    p1DamageMult: 1.12,
+    p1DecapBonus: 0.06,
+    isCoop: true,
+    p2Name: 'ALLIÉ AKA',
+  });
+}
+
+function createRoomSession(
+  roomCode: string,
+  stage: StageId = 'forest',
+  roomMode: 'versus' | 'coop' = 'versus'
+): RoomSession {
   return {
     roomCode,
     stage,
+    roomMode,
     createdAt: Date.now(),
     pcSocket: null,
     akaSocket: null,
@@ -189,6 +233,7 @@ function createRoomSession(roomCode: string, stage: StageId = 'arena'): RoomSess
       p1MaxHp: 115,
       p2MaxHp: 115,
     }),
+    coopZone: createCoopZoneForStage(stage),
     roundCooldown: 0,
   };
 }
@@ -208,6 +253,7 @@ function getPresencePayload(room: RoomSession) {
     type: 'room:presence',
     roomCode: room.roomCode,
     stage: room.stage,
+    roomMode: room.roomMode,
     hasPc: Boolean(room.pcSocket && room.pcSocket.readyState === WebSocket.OPEN),
     hasAka: Boolean(room.akaSocket && room.akaSocket.readyState === WebSocket.OPEN),
   };
@@ -243,6 +289,7 @@ async function startServer() {
         summaries.push({
           roomCode: room.roomCode,
           stage: room.stage,
+          roomMode: room.roomMode,
           hasPc,
           hasAka,
           createdAt: room.createdAt,
@@ -559,9 +606,11 @@ async function startServer() {
       }
 
       if (type === 'room:create') {
-        const stage = (msg.stage as StageId) || 'arena';
+        const stage = sanitizeStage(msg.stage);
+        const roomMode: 'versus' | 'coop' =
+          msg.roomMode === 'coop' ? 'coop' : 'versus';
         const code = generateRoomCode();
-        const session = createRoomSession(code, stage);
+        const session = createRoomSession(code, stage, roomMode);
         session.pcSocket = ws;
         rooms.set(code, session);
         joinedRoomCode = code;
@@ -573,7 +622,9 @@ async function startServer() {
             roomCode: code,
             role: 'pc',
             stage: session.stage,
+            roomMode: session.roomMode,
             match: session.match,
+            coopZone: session.coopZone,
           })
         );
         broadcastRoom(session, getPresencePayload(session));
@@ -589,7 +640,7 @@ async function startServer() {
 
         let session = rooms.get(code);
         if (!session) {
-          session = createRoomSession(code, 'arena');
+          session = createRoomSession(code, 'forest', 'versus');
           rooms.set(code, session);
         }
 
@@ -613,6 +664,7 @@ async function startServer() {
             p1MaxHp: 115,
             p2MaxHp: 115,
           });
+          session.coopZone = createCoopZoneForStage(session.stage);
         }
 
         ws.send(
@@ -621,7 +673,9 @@ async function startServer() {
             roomCode: code,
             role: requestedRole,
             stage: session.stage,
+            roomMode: session.roomMode,
             match: session.match,
+            coopZone: session.coopZone,
           })
         );
         broadcastRoom(session, getPresencePayload(session));
@@ -649,7 +703,7 @@ async function startServer() {
       }
 
       if (type === 'stage:change') {
-        const nextStage = (msg.stage as StageId) || 'arena';
+        const nextStage = sanitizeStage(msg.stage);
         session.stage = nextStage;
         session.match = createInitialMatch({
           stage: nextStage,
@@ -660,11 +714,49 @@ async function startServer() {
           p1MaxHp: 115,
           p2MaxHp: 115,
         });
+        session.coopZone = createCoopZoneForStage(nextStage);
+        broadcastRoom(session, getPresencePayload(session));
         broadcastRoom(session, {
           type: 'room:state',
           roomCode: session.roomCode,
           match: session.match,
           akaLine: buildCompactAkaLine(session.match),
+        });
+        broadcastRoom(session, {
+          type: 'room:coop_state',
+          roomCode: session.roomCode,
+          stage: session.stage,
+          coopZone: session.coopZone,
+        });
+        return;
+      }
+
+      if (type === 'room:mode') {
+        const nextMode: 'versus' | 'coop' =
+          msg.roomMode === 'coop' ? 'coop' : 'versus';
+        session.roomMode = nextMode;
+        session.match = createInitialMatch({
+          stage: session.stage,
+          mode: 'wifi_multi',
+          p1Name: 'KROM PC',
+          p2Name: 'RIVAL AKA',
+          p2Skin: 'rival_aka',
+          p1MaxHp: 115,
+          p2MaxHp: 115,
+        });
+        session.coopZone = createCoopZoneForStage(session.stage);
+        broadcastRoom(session, getPresencePayload(session));
+        broadcastRoom(session, {
+          type: 'room:state',
+          roomCode: session.roomCode,
+          match: session.match,
+          akaLine: buildCompactAkaLine(session.match),
+        });
+        broadcastRoom(session, {
+          type: 'room:coop_state',
+          roomCode: session.roomCode,
+          stage: session.stage,
+          coopZone: session.coopZone,
         });
         return;
       }
@@ -679,12 +771,19 @@ async function startServer() {
           p1MaxHp: 115,
           p2MaxHp: 115,
         });
+        session.coopZone = createCoopZoneForStage(session.stage);
         session.roundCooldown = 0;
         broadcastRoom(session, {
           type: 'room:state',
           roomCode: session.roomCode,
           match: session.match,
           akaLine: buildCompactAkaLine(session.match),
+        });
+        broadcastRoom(session, {
+          type: 'room:coop_state',
+          roomCode: session.roomCode,
+          stage: session.stage,
+          coopZone: session.coopZone,
         });
       }
     });
@@ -718,25 +817,56 @@ async function startServer() {
       const hasAka = Boolean(session.akaSocket && session.akaSocket.readyState === WebSocket.OPEN);
       if (!hasPc && !hasAka) continue;
 
-      stepMatch(session.match, session.p1Input, session.p2Input, 'whirlwind_edge');
-      stepMatch(session.match, session.p1Input, session.p2Input, 'whirlwind_edge');
-
-      if (session.match.roundOver && !session.match.matchOver) {
-        session.roundCooldown += 1;
-        if (session.roundCooldown > 75) {
-          session.roundCooldown = 0;
-          resetForNextRound(session.match);
-        }
+      if (session.roomMode === 'coop') {
+        stepZoneTraversal(
+          session.coopZone,
+          session.p1Input,
+          'whirlwind_edge',
+          undefined,
+          'VOIE LIBRE · ZONE PACIFIÉE !',
+          'normal',
+          'fr',
+          session.p2Input,
+          'iron_riposte'
+        );
+        stepZoneTraversal(
+          session.coopZone,
+          session.p1Input,
+          'whirlwind_edge',
+          undefined,
+          'VOIE LIBRE · ZONE PACIFIÉE !',
+          'normal',
+          'fr',
+          session.p2Input,
+          'iron_riposte'
+        );
+        broadcastRoom(session, {
+          type: 'room:coop_state',
+          roomCode: session.roomCode,
+          stage: session.stage,
+          coopZone: session.coopZone,
+        });
       } else {
-        session.roundCooldown = 0;
-      }
+        stepMatch(session.match, session.p1Input, session.p2Input, 'whirlwind_edge');
+        stepMatch(session.match, session.p1Input, session.p2Input, 'whirlwind_edge');
 
-      broadcastRoom(session, {
-        type: 'room:state',
-        roomCode: session.roomCode,
-        match: session.match,
-        akaLine: buildCompactAkaLine(session.match),
-      });
+        if (session.match.roundOver && !session.match.matchOver) {
+          session.roundCooldown += 1;
+          if (session.roundCooldown > 75) {
+            session.roundCooldown = 0;
+            resetForNextRound(session.match);
+          }
+        } else {
+          session.roundCooldown = 0;
+        }
+
+        broadcastRoom(session, {
+          type: 'room:state',
+          roomCode: session.roomCode,
+          match: session.match,
+          akaLine: buildCompactAkaLine(session.match),
+        });
+      }
     }
   }, 33);
 

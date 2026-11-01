@@ -13,11 +13,11 @@
   "CREDITS_AUTHOR": "Auteur :",
   "CREDITS_LICENSE": "Licence :",
   "CREDITS_SOURCE": "Code & Release :",
-  "CTRL_1": "Stick/DPad : Marche / Saut / Bas",
+  "CTRL_1": "DPad/Stick: Marche/Saut/Bas",
   "CTRL_2": "A : Taille Vive / Estoc",
   "CTRL_3": "B : Balayage Bas",
-  "CTRL_4": "C : Moulinet Decapitant 360",
-  "CTRL_5": "D : Roulade d'Esquive",
-  "CTRL_6": "L1 : Parade  |  R1 : Fendoir",
-  "CTRL_7": "MENU : Systeme | RUN+MENU : Loader"
+  "CTRL_4": "C : Moulinet Decapitant",
+  "CTRL_5": "D : Roulade / Forge",
+  "CTRL_6": "L1: Parade  |  R1: Fendoir",
+  "CTRL_7": "MENU: Pause | +RUN: Loader"
 }

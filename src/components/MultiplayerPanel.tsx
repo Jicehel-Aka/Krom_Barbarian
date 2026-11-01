@@ -7,22 +7,28 @@ import {
   Check,
   RefreshCw,
   Users,
+  Swords,
+  Shield,
   GitBranch,
   ExternalLink,
 } from 'lucide-react';
 import { buildAkaArduinoSketch } from '../game/akaFirmware';
+import { getLocalizedWebUi } from '../i18n/gameContentLocale';
 import type { WifiMultiplayerController } from '../hooks/useWifiMultiplayer';
 import type { WebSerialAKAController } from '../hooks/useWebSerialAKA';
-import type { StageId } from '../types/game';
+import type { LanguageCode, StageId } from '../types/game';
 
 interface MultiplayerPanelProps {
   wifi: WifiMultiplayerController;
   usb: WebSerialAKAController;
+  language?: LanguageCode;
   selectedStage: StageId;
   onSelectStage: (stage: StageId) => void;
   onLaunchWifiArena: (asRole: 'pc' | 'aka') => void;
+  onLaunchWifiCoop: (asRole: 'pc' | 'aka') => void;
   onLaunchUsbArena: () => void;
   onLaunchLocal2P: () => void;
+  onLaunchCoopLocal: () => void;
 }
 
 interface GithubStatus {
@@ -32,23 +38,30 @@ interface GithubStatus {
   callbackUrl: string;
 }
 
-const STAGE_OPTIONS: { id: StageId; label: string }[] = [
-  { id: 'forest', label: 'Clairières Cendrées' },
-  { id: 'crypt', label: 'Cryptes d’Obsidienne' },
-  { id: 'arena', label: 'Arène des Ossements' },
-  { id: 'sanctuary', label: 'Sanctuaire de Drax' },
+const STAGE_IDS: readonly StageId[] = [
+  'forest',
+  'caverns',
+  'crypt',
+  'arena',
+  'inferno',
+  'sanctuary',
 ];
 
 export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
   wifi,
   usb,
+  language = 'fr',
   selectedStage,
   onSelectStage,
   onLaunchWifiArena,
+  onLaunchWifiCoop,
   onLaunchUsbArena,
   onLaunchLocal2P,
+  onLaunchCoopLocal,
 }) => {
-  const [linkTab, setLinkTab] = useState<'wifi' | 'usb' | 'firmware' | 'github'>('github');
+  const ui = getLocalizedWebUi(language);
+  const [linkTab, setLinkTab] = useState<'wifi' | 'usb' | 'firmware' | 'github'>('wifi');
+  const [preferredWifiMode, setPreferredWifiMode] = useState<'coop' | 'versus'>('coop');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
 
@@ -230,6 +243,65 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
         </div>
       </div>
 
+      {/* 6-Act Stage Selector & Instant 2P Cooperative Horde vs 1v1 Arena Launcher */}
+      <div className="p-6 bg-[#151921] border border-slate-800/90 rounded-xl space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1 max-w-2xl">
+            <p className="text-xs text-emerald-400 font-semibold">
+              6 Actes Synchronisés · Raid Collaboratif Horde (1800×240) & Duel d’Arène (320×240)
+            </p>
+            <h3 className="text-lg sm:text-xl font-bold text-white">
+              Choisissez l’Acte (1 à 6) puis lancez un Raid Coopératif à 2 ou un Duel 1v1
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              En <strong>Raid Coopératif 2 Joueurs</strong>, Krom (J1 : ZQSD/WASD + F/G/R/E/Shift) et Kaelen (J2 : Flèches + J/K/L/O/U ou Console AKA) traversent ensemble les 6 panoramas géants face à des hordes doublées (embuscades avant/arrière, jusqu’à 4 monstres simultanés, réanimation alliée avec <code className="font-mono text-amber-300">D</code> et Boss + Gardes d’Élite en final).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onLaunchCoopLocal}
+              className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Raid Coopératif 2J (Clavier)</span>
+            </button>
+            <button
+              type="button"
+              onClick={onLaunchLocal2P}
+              className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-200 bg-[#0C0E12] hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Swords className="w-3.5 h-3.5 text-amber-400" />
+              <span>Duel d’Arène 1v1 (Clavier)</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-300 mr-1">
+            Acte / Niveau sélectionné (6 mondes) :
+          </span>
+          {STAGE_IDS.map((stageId, idx) => (
+            <button
+              key={stageId}
+              type="button"
+              onClick={() => {
+                onSelectStage(stageId);
+                if (wifi.roomCode) wifi.changeStage(stageId);
+              }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                selectedStage === stageId
+                  ? 'bg-slate-800 text-amber-300 border-amber-500/60'
+                  : 'bg-[#0C0E12] text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              {idx + 1}. {ui.stageNames[stageId]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* TAB 0: GITHUB REPOSITORY & ON-DEMAND RELEASE WORKFLOW */}
       {linkTab === 'github' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
@@ -394,75 +466,79 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
         </div>
       )}
 
-      {/* Stage Picker for WiFi / USB / 2P */}
-      {(linkTab === 'wifi' || linkTab === 'usb') && (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-slate-300 mr-1">
-              Décor de l’Arène 320×240 :
-            </span>
-            {STAGE_OPTIONS.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => {
-                  onSelectStage(st.id);
-                  if (wifi.roomCode) wifi.changeStage(st.id);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  selectedStage === st.id
-                    ? 'bg-slate-800 text-amber-300 border-amber-500/60'
-                    : 'bg-[#151921] text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={onLaunchLocal2P}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-200 bg-[#151921] hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Users className="w-3.5 h-3.5 text-amber-400" />
-            <span>Duel 2 Joueurs sur ce Clavier</span>
-          </button>
-        </div>
-      )}
-
-      {/* TAB 1: WIFI WEBSOCKET */}
+      {/* TAB 1: WIFI WEBSOCKET (CO-OP HORDE OR 1V1 DUEL) */}
       {linkTab === 'wifi' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           <div className="p-6 bg-[#151921] border border-slate-800/90 rounded-xl flex flex-col justify-between gap-6">
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-400 tabular-nums">
                 <span>
                   Serveur WebSocket :{' '}
                   <strong className={wifi.connected ? 'text-emerald-400' : 'text-red-400'}>
-                    {wifi.connected ? 'Actif (/ws)' : 'Reconnexion…'}
+                    {wifi.connected ? 'Actif (/ws · 60 Hz)' : 'Reconnexion…'}
                   </strong>
                 </span>
                 {wifi.latencyMs !== null && <span>Latence : {wifi.latencyMs} ms</span>}
               </div>
 
               <h3 className="text-xl font-bold text-white">
-                01. Héberger le Duel sur le PC (Joueur 1 · Krom)
+                01. Héberger un Salon WiFi (Coopératif Horde ou Duel 1v1)
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Générez un code de salon pour relier votre PC et votre Gamebuino AKA en WiFi local (320×240 synchronisé à 60 Hz).
+                Choisissez le mode du salon sans fil pour jouer côte à côte contre les vagues renforcées des 6 panoramas ou vous affronter en duel d’arène.
               </p>
+
+              {/* Interactive Room Mode Selector */}
+              <div className="flex flex-wrap items-center gap-1 p-1 bg-[#0C0E12] border border-slate-800 rounded-lg w-fit">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreferredWifiMode('coop');
+                    if (wifi.roomCode) wifi.changeRoomMode('coop');
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    (wifi.roomCode ? wifi.roomMode : preferredWifiMode) === 'coop'
+                      ? 'bg-emerald-400 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Coopératif Horde (2J vs Monstres)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreferredWifiMode('versus');
+                    if (wifi.roomCode) wifi.changeRoomMode('versus');
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    (wifi.roomCode ? wifi.roomMode : preferredWifiMode) === 'versus'
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <Swords className="w-3.5 h-3.5" />
+                  <span>Duel d’Arène (1v1)</span>
+                </button>
+              </div>
 
               {wifi.roomCode && wifi.role === 'pc' && (
                 <div className="pt-4 border-t border-slate-800 space-y-2">
-                  <p className="text-xs text-slate-400">Code du Salon Actif</p>
+                  <p className="text-xs text-slate-400">
+                    Code du Salon Actif ·{' '}
+                    <span className="text-slate-200">
+                      {wifi.roomMode === 'coop'
+                        ? 'Raid Coopératif Horde'
+                        : 'Duel d’Arène 1v1'}
+                    </span>
+                  </p>
                   <p className="text-3xl font-bold font-mono tracking-widest text-amber-400 tabular-nums">
                     {wifi.roomCode}
                   </p>
                   <p className="text-xs text-slate-300">
-                    PC : <strong className="text-emerald-400">Prêt</strong> · Gamebuino AKA :{' '}
+                    PC : <strong className="text-emerald-400">Prêt</strong> · Second Joueur / AKA :{' '}
                     <strong className={wifi.hasAka ? 'text-emerald-400' : 'text-amber-300'}>
-                      {wifi.hasAka ? 'Connectée !' : 'En attente…'}
+                      {wifi.hasAka ? 'Connecté !' : 'En attente…'}
                     </strong>
                   </p>
                 </div>
@@ -473,7 +549,7 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
               <button
                 type="button"
                 disabled={!wifi.connected}
-                onClick={() => wifi.createRoom(selectedStage)}
+                onClick={() => wifi.createRoom(selectedStage, preferredWifiMode)}
                 className="px-4 py-2.5 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 {wifi.roomCode && wifi.role === 'pc'
@@ -484,10 +560,16 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
               {wifi.roomCode && wifi.role === 'pc' && (
                 <button
                   type="button"
-                  onClick={() => onLaunchWifiArena('pc')}
+                  onClick={() =>
+                    wifi.roomMode === 'coop'
+                      ? onLaunchWifiCoop('pc')
+                      : onLaunchWifiArena('pc')
+                  }
                   className="px-4 py-2.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-600 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Entrer dans l’Arène (PC)
+                  {wifi.roomMode === 'coop'
+                    ? 'Lancer le Raid Coop (PC)'
+                    : 'Entrer dans l’Arène (PC)'}
                 </button>
               )}
             </div>
@@ -496,7 +578,7 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
           <div className="p-6 bg-[#151921] border border-slate-800/90 rounded-xl flex flex-col justify-between gap-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
-                <span>Client Sans Fil · Rôle Console AKA (Joueur 2)</span>
+                <span>Client Sans Fil · Rôle Allié / Rival AKA (Joueur 2)</span>
                 <button
                   type="button"
                   onClick={() => wifi.refreshOpenRooms()}
@@ -511,46 +593,63 @@ export const MultiplayerPanel: React.FC<MultiplayerPanelProps> = ({
                 02. Rejoindre depuis une AKA ou un Second Poste
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Entrez le code du salon depuis votre console AKA en WiFi ou testez la liaison depuis une seconde fenêtre simulée.
+                Entrez le code du salon depuis votre console AKA en WiFi ou ouvrez un second onglet navigateur pour tester immédiatement la coopération ou le duel en temps réel.
               </p>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <input
                   type="text"
                   maxLength={6}
                   value={joinCodeInput}
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                   placeholder="Code ex. KRO4"
-                  className="w-40 px-3 py-2 text-sm font-mono uppercase bg-[#0C0E12] border border-slate-700 focus:border-amber-500 rounded-lg text-white outline-none"
+                  className="w-36 px-3 py-2 text-sm font-mono uppercase bg-[#0C0E12] border border-slate-700 focus:border-amber-500 rounded-lg text-white outline-none"
                 />
                 <button
                   type="button"
                   disabled={!wifi.connected || !joinCodeInput.trim()}
                   onClick={() => {
+                    const matched = wifi.openRooms.find(
+                      (rm) => rm.roomCode === joinCodeInput.trim().toUpperCase()
+                    );
                     wifi.joinRoom(joinCodeInput, 'aka');
-                    onLaunchWifiArena('aka');
+                    if (matched?.roomMode === 'coop') {
+                      onLaunchWifiCoop('aka');
+                    } else if (matched?.roomMode === 'versus') {
+                      onLaunchWifiArena('aka');
+                    } else if (preferredWifiMode === 'coop') {
+                      onLaunchWifiCoop('aka');
+                    } else {
+                      onLaunchWifiArena('aka');
+                    }
                   }}
                   className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Rejoindre comme AKA
+                  Rejoindre comme J2 / AKA
                 </button>
               </div>
 
               {wifi.openRooms.length > 0 && (
                 <div className="pt-3 border-t border-slate-800 space-y-2">
-                  <p className="text-xs text-slate-400">Salons ouverts :</p>
+                  <p className="text-xs text-slate-400">Salons ouverts sur le serveur :</p>
                   <div className="flex flex-wrap gap-2">
                     {wifi.openRooms.map((r) => (
                       <button
                         key={r.roomCode}
                         type="button"
                         onClick={() => {
+                          onSelectStage(r.stage);
                           wifi.joinRoom(r.roomCode, 'aka');
-                          onLaunchWifiArena('aka');
+                          if (r.roomMode === 'coop') {
+                            onLaunchWifiCoop('aka');
+                          } else {
+                            onLaunchWifiArena('aka');
+                          }
                         }}
                         className="px-3 py-1.5 text-xs font-mono text-amber-300 bg-[#0C0E12] hover:bg-slate-900 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        Rejoindre {r.roomCode}
+                        Rejoindre {r.roomCode} · {r.roomMode === 'coop' ? 'COOP' : '1V1'} ·{' '}
+                        {ui.stageNames[r.stage]}
                       </button>
                     ))}
                   </div>

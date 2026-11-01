@@ -1,9 +1,11 @@
 import React from 'react';
 import { FORGE_UPGRADES, SWORD_TECHNIQUES, type UpgradeSpec } from '../data/campaign';
-import type { ProgressionState, TechniqueId } from '../types/game';
+import { getLocalizedForge, getLocalizedWebUi } from '../i18n/gameContentLocale';
+import type { LanguageCode, ProgressionState, TechniqueId } from '../types/game';
 
 interface ProgressionForgeProps {
   progression: ProgressionState;
+  language: LanguageCode;
   onPurchaseUpgrade: (key: UpgradeSpec['key'], cost: number) => void;
   onUnlockTechnique: (id: TechniqueId, cost: number) => void;
   onEquipTechnique: (id: TechniqueId) => void;
@@ -13,6 +15,7 @@ interface ProgressionForgeProps {
 
 export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
   progression,
+  language,
   onPurchaseUpgrade,
   onUnlockTechnique,
   onEquipTechnique,
@@ -20,6 +23,8 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
   onReturnToArena,
 }) => {
   const maxRank = 4;
+  const ui = getLocalizedWebUi(language);
+  const fg = getLocalizedForge(language);
 
   return (
     <section className="space-y-10">
@@ -27,34 +32,37 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
       <div className="flex flex-wrap items-end justify-between gap-6 pb-6 border-b border-slate-800/90">
         <div className="max-w-2xl">
           <p className="text-xs text-amber-400 font-semibold mb-1">
-            Progression de Krom · Sauvegarde Locale Automatique
+            {ui.forgePageKicker}
           </p>
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 text-balance">
-            La Forge des Hautes-Brumes
+            {ui.forgePageTitle}
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
-            Dépensez vos Éclats d’Acier récoltés sur les sbires des zones et les Seigneurs de Guerre. Vos améliorations et votre <strong>Botte Secrète</strong> s’appliquent immédiatement à Krom (visibles en haut à gauche du HUD 320×240). Sur la console Gamebuino AKA, cette Forge s’ouvre automatiquement au bivouac entre deux Actes ou via le <strong>Bouton D (touche E)</strong> avant chaque Boss et après une défaite.
+            {ui.forgePageIntro}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-6 text-sm tabular-nums">
           <div>
-            <p className="text-xs text-slate-400">Éclats d’Acier</p>
+            <p className="text-xs text-slate-400">{fg.shardsLabel}</p>
             <p className="text-2xl font-bold font-mono text-amber-400">
               {progression.steelShards}
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">Meilleur Score</p>
+            <p className="text-xs text-slate-400">{ui.forgeBestScoreLabel}</p>
             <p className="text-lg font-bold font-mono text-white">
-              {progression.highScore.toLocaleString('fr-FR')} PTS
+              {progression.highScore.toLocaleString(language)} PTS
             </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">Tableau de Chasse</p>
+            <p className="text-xs text-slate-400">{ui.forgeHuntLabel}</p>
             <p className="text-sm font-semibold font-mono text-slate-200">
-              {progression.totalMinionsSlain} Sbires · {progression.totalWins} Boss ·{' '}
-              {progression.totalDecapitations} Décap.
+              {ui.forgeHuntValue(
+                progression.totalMinionsSlain,
+                progression.totalWins,
+                progression.totalDecapitations
+              )}
             </p>
           </div>
           <button
@@ -62,18 +70,17 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
             onClick={onReturnToArena}
             className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            Retourner au Combat
+            {ui.forgeReturnCombatBtn}
           </button>
         </div>
       </div>
 
       {/* Stat Upgrades Grid */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold text-white">
-          01. Attributs du Guerrier & Trempe de l’Acier
-        </h3>
+        <h3 className="text-lg font-bold text-white">{ui.forgeSection1Title}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {FORGE_UPGRADES.map((up) => {
+            const locUp = fg.upgrades[up.key];
             const currentRank = progression[up.key];
             const isMax = currentRank >= maxRank;
             const nextCost = up.baseCost + currentRank * up.costStep;
@@ -87,15 +94,15 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-xs text-slate-400 tabular-nums">
                     <span>
-                      {up.unitLabel} · Rang {currentRank}/{maxRank}
+                      {locUp.unitLabel} · {ui.forgeRankLabel(currentRank, maxRank)}
                     </span>
                     <span className="font-mono text-amber-300">
-                      {up.formatEffect(currentRank)}
+                      {locUp.formatEffect(currentRank)}
                     </span>
                   </div>
-                  <h4 className="text-base font-bold text-white">{up.title}</h4>
+                  <h4 className="text-base font-bold text-white">{locUp.title}</h4>
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    {up.description}
+                    {locUp.description}
                   </p>
                 </div>
 
@@ -123,7 +130,7 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
                         : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     }`}
                   >
-                    {isMax ? 'Maîtrise Maximale' : `Forger (${nextCost} Éclats)`}
+                    {isMax ? ui.forgeMaxMasteryBtn : ui.forgeBuyBtn(nextCost)}
                   </button>
                 </div>
               </div>
@@ -134,11 +141,10 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
 
       {/* Master Sword Techniques */}
       <div className="space-y-4">
-        <h3 className="text-lg font-bold text-white">
-          02. Bottes Secrètes & Style d’Escrime
-        </h3>
+        <h3 className="text-lg font-bold text-white">{ui.forgeSection2Title}</h3>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {SWORD_TECHNIQUES.map((tech) => {
+            const locTech = fg.techniques[tech.id];
             const isUnlocked = progression.unlockedTechniques.includes(tech.id);
             const isEquipped = progression.equippedTechnique === tech.id;
             const canBuy = !isUnlocked && progression.steelShards >= tech.unlockCost;
@@ -152,24 +158,28 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-xs font-mono">
-                    <span className="text-amber-400">Commande : {tech.inputHint}</span>
+                    <span className="text-amber-400">
+                      {ui.forgeCommandPrefix} {locTech.inputHint}
+                    </span>
                     {isEquipped && (
-                      <span className="text-emerald-400 font-semibold">★ ÉQUIPÉE</span>
+                      <span className="text-emerald-400 font-semibold">
+                        {fg.equippedTag}
+                      </span>
                     )}
                   </div>
-                  <h4 className="text-base font-bold text-white">{tech.name}</h4>
+                  <h4 className="text-base font-bold text-white">{locTech.name}</h4>
                   <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                    {tech.summary}
+                    {locTech.summary}
                   </p>
                 </div>
 
                 <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
                   <span className="text-xs text-slate-400 tabular-nums">
                     {isEquipped
-                      ? 'Style actif en combat'
+                      ? ui.forgeActiveStyleLabel
                       : isUnlocked
-                      ? 'Débloqué'
-                      : `Coût : ${tech.unlockCost} Éclats`}
+                      ? ui.guideUnlockedTag
+                      : ui.guideCostTag(tech.unlockCost)}
                   </span>
 
                   {isUnlocked ? (
@@ -183,7 +193,7 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
                           : 'bg-slate-800 hover:bg-slate-700 text-white cursor-pointer'
                       }`}
                     >
-                      {isEquipped ? 'Équipée' : 'Équiper'}
+                      {isEquipped ? ui.forgeEquippedBtn : ui.guideEquipBtn}
                     </button>
                   ) : (
                     <button
@@ -196,7 +206,7 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Apprendre ({tech.unlockCost} Éclats)
+                      {ui.forgeLearnBtn(tech.unlockCost)}
                     </button>
                   )}
                 </div>
@@ -208,15 +218,13 @@ export const ProgressionForge: React.FC<ProgressionForgeProps> = ({
 
       {/* Quiet Reset Action */}
       <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-4 text-xs text-slate-400">
-        <span>
-          Votre progression, votre meilleur score et vos Éclats d’Acier sont enregistrés automatiquement sur cet appareil.
-        </span>
+        <span>{ui.forgeSaveNotice}</span>
         <button
           type="button"
           onClick={onResetProgression}
           className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
         >
-          Réinitialiser la sauvegarde
+          {ui.forgeResetBtn}
         </button>
       </div>
     </section>

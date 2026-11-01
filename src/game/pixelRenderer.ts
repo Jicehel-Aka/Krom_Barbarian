@@ -1,4 +1,10 @@
-import { GROUND_Y, NATIVE_HEIGHT, NATIVE_WIDTH, ZONE_WORLD_WIDTH } from './combatEngine';
+import {
+  GROUND_Y,
+  NATIVE_HEIGHT,
+  NATIVE_WIDTH,
+  ZONE_WALL_GATES,
+  ZONE_WORLD_WIDTH,
+} from './combatEngine';
 import {
   ensureSpriteAtlasLoaded,
   getFighterScale,
@@ -8,6 +14,7 @@ import {
   selectFighterSpriteFrame,
   selectFxSpriteFrame,
   selectGoblinSpriteFrame,
+  type FxSpriteKind,
 } from './spriteAtlas';
 import {
   ensureStageArtLoaded,
@@ -16,6 +23,13 @@ import {
   getZoneScrollCanvas960,
 } from './stageArt';
 import { SUPPORTED_LANGUAGES, TRANSLATIONS } from '../i18n/translations';
+import {
+  getLocalizedAct,
+  getLocalizedCodex,
+  getLocalizedCombatText,
+  getLocalizedCutscene,
+  getLocalizedForge,
+} from '../i18n/gameContentLocale';
 import {
   FORGE_UPGRADES,
   SWORD_TECHNIQUES,
@@ -35,6 +49,7 @@ import type {
   FloorDecal,
   GoreMode,
   ImpactEffect,
+  LanguageCode,
   MatchState,
   ProgressionState,
   ScreenFlowState,
@@ -65,32 +80,62 @@ function drawCrispText(
   color: string,
   sizePx = 10,
   align: CanvasTextAlign = 'left',
-  bold = true
+  bold = true,
+  maxWidthPx?: number
 ): void {
+  if (!text) return;
   ctx.save();
-  ctx.font = `${bold ? '700' : '500'} ${sizePx}px "JetBrains Mono", monospace`;
+  let curSize = sizePx;
+  ctx.font = `${bold ? '700' : '500'} ${curSize}px "JetBrains Mono", monospace`;
+  if (maxWidthPx && maxWidthPx > 0) {
+    while (curSize > 6 && ctx.measureText(text).width > maxWidthPx) {
+      curSize -= 0.5;
+      ctx.font = `${bold ? '700' : '500'} ${curSize}px "JetBrains Mono", monospace`;
+    }
+  }
   ctx.textAlign = align;
   ctx.textBaseline = 'top';
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
   ctx.fillStyle = '#05070a';
-  ctx.fillText(text, Math.floor(x) + 1, Math.floor(y) + 1);
+  if (maxWidthPx && maxWidthPx > 0) {
+    ctx.fillText(text, ix + 1, iy + 1, maxWidthPx);
+  } else {
+    ctx.fillText(text, ix + 1, iy + 1);
+  }
   ctx.fillStyle = color;
-  ctx.fillText(text, Math.floor(x), Math.floor(y));
+  if (maxWidthPx && maxWidthPx > 0) {
+    ctx.fillText(text, ix, iy, maxWidthPx);
+  } else {
+    ctx.fillText(text, ix, iy);
+  }
   ctx.restore();
 }
 
-function wrapLines(text: string, maxChars: number): string[] {
-  const words = text.split(' ');
+function wrapTextPx(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidthPx: number,
+  sizePx = 8,
+  bold = false
+): string[] {
+  if (!text) return [];
+  ctx.save();
+  ctx.font = `${bold ? '700' : '500'} ${sizePx}px "JetBrains Mono", monospace`;
+  const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let cur = '';
   for (const w of words) {
-    if ((cur + ' ' + w).trim().length > maxChars) {
-      if (cur) lines.push(cur);
+    const candidate = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(candidate).width > maxWidthPx && cur) {
+      lines.push(cur);
       cur = w;
     } else {
-      cur = (cur + ' ' + w).trim();
+      cur = candidate;
     }
   }
   if (cur) lines.push(cur);
+  ctx.restore();
   return lines;
 }
 
@@ -130,18 +175,26 @@ function drawFallbackProceduralStage(ctx: CanvasRenderingContext2D, stage: Stage
   const sky =
     stage === 'forest'
       ? '#1d1930'
+      : stage === 'caverns'
+      ? '#0b2236'
       : stage === 'crypt'
       ? '#0e0c12'
       : stage === 'arena'
       ? '#451215'
+      : stage === 'inferno'
+      ? '#261029'
       : '#160b24';
   const floor =
     stage === 'forest'
       ? '#2b241d'
+      : stage === 'caverns'
+      ? '#1e303d'
       : stage === 'crypt'
       ? '#1c1d22'
       : stage === 'arena'
       ? '#8a5229'
+      : stage === 'inferno'
+      ? '#2c1c24'
       : '#1a1528';
   pxRect(ctx, 0, 0, NATIVE_WIDTH, GROUND_Y, sky);
   pxRect(ctx, 0, GROUND_Y, NATIVE_WIDTH, NATIVE_HEIGHT - GROUND_Y, floor);
@@ -157,52 +210,48 @@ function drawLightHalo(
   tick: number,
   seed = 0
 ): void {
-  const pulse = Math.sin(tick * 0.16 + seed * 1.7) * 0.035;
-  const aOuter = Math.max(0.02, baseAlpha * 0.45 + pulse);
-  const aMid = Math.max(0.04, baseAlpha * 0.85 + pulse);
-  const aCore = Math.max(0.06, baseAlpha * 1.3 + pulse);
-  const r1 = Math.round(radius);
-  const r2 = Math.round(radius * 0.62);
-  const r3 = Math.round(radius * 0.32);
+  if (x < -radius || x > NATIVE_WIDTH + radius) return;
+  const pulse = Math.sin(tick * 0.14 + seed * 1.7) * 0.025;
+  const alpha = Math.max(0.03, Math.min(0.24, baseAlpha + pulse));
+  const r = Math.max(6, Math.round(radius));
 
-  ctx.fillStyle = `rgba(${rgb}, ${aOuter.toFixed(3)})`;
-  ctx.fillRect(Math.floor(x - r1), Math.floor(y - r1 * 0.75), r1 * 2, Math.floor(r1 * 1.5));
-  ctx.fillStyle = `rgba(${rgb}, ${aMid.toFixed(3)})`;
-  ctx.fillRect(Math.floor(x - r2), Math.floor(y - r2 * 0.75), r2 * 2, Math.floor(r2 * 1.5));
-  ctx.fillStyle = `rgba(${rgb}, ${aCore.toFixed(3)})`;
-  ctx.fillRect(Math.floor(x - r3), Math.floor(y - r3 * 0.75), r3 * 2, Math.floor(r3 * 1.5));
+  ctx.save();
+  const grad = ctx.createRadialGradient(x, y, 1, x, y, r);
+  grad.addColorStop(0, `rgba(${rgb}, ${alpha.toFixed(3)})`);
+  grad.addColorStop(0.55, `rgba(${rgb}, ${(alpha * 0.42).toFixed(3)})`);
+  grad.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawFxProp(
   ctx: CanvasRenderingContext2D,
-  kind: 'torch' | 'lava' | 'crow' | 'monolith' | 'brazier',
+  kind: FxSpriteKind,
   x: number,
   y: number,
   scale: number,
-  tick: number
+  tick: number,
+  topAnchored = false
 ): void {
-  if (x < -48 || x > NATIVE_WIDTH + 48) return;
-  const fxSheet = getSheetCanvas('goblinAndFx', false);
-  if (!fxSheet) {
-    if (kind === 'torch' || kind === 'brazier') {
+  if (x < -56 || x > NATIVE_WIDTH + 56) return;
+  const f = selectFxSpriteFrame(kind, tick);
+  const sheet = getSheetCanvas(f.sheet, false);
+  if (!sheet) {
+    if (kind === 'torch' || kind === 'brazier' || kind === 'arcane_brazier') {
       drawAnimatedFlame(ctx, x, y, tick, 0.85);
     }
     return;
   }
-  const f = selectFxSpriteFrame(kind, tick);
   const dw = Math.max(4, Math.round(f.w * scale));
   const dh = Math.max(4, Math.round(f.h * scale));
-  ctx.drawImage(
-    fxSheet,
-    f.x,
-    f.y,
-    f.w,
-    f.h,
-    Math.round(x - dw * 0.5),
-    Math.round(y - dh),
-    dw,
-    dh
-  );
+  const dax = Math.round(f.ax * scale);
+  const dx = Math.round(x - dax);
+  const dy = topAnchored ? Math.round(y) : Math.round(y - dh);
+
+  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
 }
 
 function drawForkedLightningBolt(
@@ -228,6 +277,34 @@ function drawForkedLightningBolt(
   }
 }
 
+function drawPixelPortcullisGate320(
+  ctx: CanvasRenderingContext2D,
+  gateWorldX: number,
+  isLocked: boolean,
+  tick: number,
+  camX: number
+): void {
+  const sx = Math.round(gateWorldX + 18 - camX);
+  if (sx < -48 || sx > NATIVE_WIDTH + 48) return;
+
+  // Grounded contact shadow beneath the riveted iron gateposts
+  ctx.fillStyle = 'rgba(5, 7, 12, 0.45)';
+  ctx.fillRect(sx - 28, GROUND_Y - 1, 56, 4);
+
+  drawFxProp(
+    ctx,
+    isLocked ? 'portcullis_closed' : 'portcullis_open',
+    sx,
+    GROUND_Y + 2,
+    0.18,
+    tick
+  );
+
+  if (isLocked) {
+    drawLightHalo(ctx, sx, GROUND_Y - 38, 18, '239, 68, 68', 0.12, tick, gateWorldX);
+  }
+}
+
 function drawStageAtmosphericOverlay(
   ctx: CanvasRenderingContext2D,
   stage: StageId,
@@ -238,96 +315,157 @@ function drawStageAtmosphericOverlay(
   camX = 0
 ): void {
   if (stage === 'forest') {
-    // Diagonal shimmering moonlight rays through canopy
-    const rayAlpha = (0.045 + Math.sin(tick * 0.04) * 0.018).toFixed(3);
+    // Soft diagonal moonlight shimmer through misty pines
+    const rayAlpha = (0.032 + Math.sin(tick * 0.04) * 0.012).toFixed(3);
     ctx.fillStyle = `rgba(186, 230, 253, ${rayAlpha})`;
     for (let r = 0; r < 3; r++) {
       const rx = 44 + r * 98 + Math.round(Math.sin(tick * 0.02 + r) * 4);
       for (let step = 0; step < 7; step++) {
-        ctx.fillRect(rx + step * 5, 16 + step * 22, 18, 22);
+        ctx.fillRect(rx + step * 5, 16 + step * 22, 16, 22);
       }
     }
 
-    // Animated Nordic Rune Monolith(s) with pulsing cyan light halo!
-    const monoPositions = isZone ? [210, 520, 825] : [278];
+    // Glowing Nordic Rune Monoliths placed in the ancient oak clearing & sanctuary approach
+    const monoPositions = isZone ? [940, 1410] : [278];
     for (let idx = 0; idx < monoPositions.length; idx++) {
       const mx = monoPositions[idx] - (isZone ? camX : 0);
       if (mx >= -40 && mx <= NATIVE_WIDTH + 40) {
         drawLightHalo(ctx, mx, GROUND_Y - 26, 26, '56, 189, 248', 0.13, tick, idx);
-        drawFxProp(ctx, 'monolith', mx, GROUND_Y + 2, 0.22, tick + idx * 9);
+        drawFxProp(ctx, 'monolith', mx, GROUND_Y + 2, 0.21, tick + idx * 9);
       }
     }
 
-    // Drifting low-lying ground mist ribbons
-    for (let m = 0; m < 4; m++) {
-      const mistX = Math.floor(((m * 96 + tick * (0.4 + m * 0.08)) % (NATIVE_WIDTH + 90)) - 45);
-      const mistY = GROUND_Y - 12 + (m % 2) * 6;
-      ctx.fillStyle = 'rgba(203, 213, 225, 0.08)';
-      ctx.fillRect(mistX, mistY, 54, 5);
+    // Warm Iron Bivouac Braziers along the deep woodland trail & runic gate
+    const campBraziers = isZone ? [470, 1445, 1650] : [36];
+    for (let idx = 0; idx < campBraziers.length; idx++) {
+      const bx = campBraziers[idx] - (isZone ? camX : 0);
+      if (bx >= -36 && bx <= NATIVE_WIDTH + 36) {
+        drawLightHalo(ctx, bx, GROUND_Y - 18, 24, '251, 146, 60', 0.14, tick, idx + 4);
+        drawFxProp(ctx, 'brazier', bx, GROUND_Y + 2, 0.18, tick + idx * 5);
+      }
     }
 
-    // Two animated Crows gliding across the misty sky
+    // Animated Crows gliding high across the night pines
     for (let c = 0; c < 2; c++) {
-      const speed = c === 0 ? 0.95 : 0.68;
-      const crowX = Math.floor((((tick * speed + c * 170) % (NATIVE_WIDTH + 64)) - 32));
-      const crowY = (c === 0 ? 50 : 68) + Math.round(Math.sin(tick * 0.06 + c * 2) * 3);
-      drawFxProp(ctx, 'crow', crowX, crowY + 8, c === 0 ? 0.16 : 0.12, tick + c * 7);
+      const speed = c === 0 ? 0.88 : 0.62;
+      const crowX = Math.floor((((tick * speed + c * 148) % (NATIVE_WIDTH + 64)) - 32));
+      const crowY = (44 + c * 15) + Math.round(Math.sin(tick * 0.06 + c * 2) * 3);
+      drawFxProp(ctx, 'crow', crowX, crowY + 8, c === 0 ? 0.15 : 0.12, tick + c * 7);
     }
 
-    // Twinkling forest fireflies with tiny warm glow
-    for (let i = 0; i < 10; i++) {
-      const fx = Math.floor((i * 37 + tick * 0.35 + Math.sin(tick * 0.05 + i) * 9) % NATIVE_WIDTH);
-      const fy = 96 + (((i * 23 - Math.floor(tick * 0.22)) % 88) + 88) % 88;
+    // Twinkling forest fireflies
+    for (let i = 0; i < 8; i++) {
+      const fx = Math.floor((i * 41 + tick * 0.32 + Math.sin(tick * 0.05 + i) * 8) % NATIVE_WIDTH);
+      const fy = 98 + (((i * 23 - Math.floor(tick * 0.2)) % 84) + 84) % 84;
       if ((tick + i * 7) % 16 < 11) {
-        ctx.fillStyle = 'rgba(250, 204, 21, 0.16)';
-        ctx.fillRect(fx - 2, fy - 2, 5, 5);
+        drawLightHalo(ctx, fx, fy, 5, '250, 204, 21', 0.14, tick, i);
         pxRect(ctx, fx, fy, 1, 1, i % 2 === 0 ? '#fde68a' : '#bef264');
       }
     }
+  } else if (stage === 'caverns') {
+    // Subterranean cyan crystal & runic seal luminescence
+    const crystalHalos = isZone ? [155, 670, 965, 1300, 1690] : [64, 160, 258];
+    for (let idx = 0; idx < crystalHalos.length; idx++) {
+      const hx = crystalHalos[idx] - (isZone ? camX : 0);
+      if (hx >= -48 && hx <= NATIVE_WIDTH + 48) {
+        drawLightHalo(ctx, hx, 108, 34, '34, 211, 238', 0.14, tick, idx + 2);
+      }
+    }
+
+    // Warm miner torches & stone pillar braziers
+    const cavernBraziers = isZone ? [310, 388, 882, 1055, 1495, 1760] : [34, 286];
+    for (let idx = 0; idx < cavernBraziers.length; idx++) {
+      const bx = cavernBraziers[idx] - (isZone ? camX : 0);
+      if (bx >= -36 && bx <= NATIVE_WIDTH + 36) {
+        drawLightHalo(ctx, bx, GROUND_Y - 22, 22, '251, 146, 60', 0.13, tick, idx);
+        if (!isZone) {
+          drawFxProp(ctx, 'brazier', bx, GROUND_Y + 2, 0.18, tick + idx * 6);
+        }
+      }
+    }
+
+    // Drifting bioluminescent crystal motes & waterfall mist
+    for (let i = 0; i < 10; i++) {
+      const mx = Math.floor((i * 33 + tick * 0.28 + Math.sin(tick * 0.05 + i) * 6) % NATIVE_WIDTH);
+      const my = 52 + (((i * 29 - Math.floor(tick * 0.25)) % 128) + 128) % 128;
+      if ((tick + i * 5) % 14 < 10) {
+        drawLightHalo(ctx, mx, my, 5, '56, 189, 248', 0.15, tick, i);
+        pxRect(ctx, mx, my, 1, 1, i % 2 === 0 ? '#67e8f9' : '#e0f2fe');
+      }
+    }
   } else if (stage === 'crypt') {
-    // Wall Torches mounted on obsidian pillars (both Arena & Scrolling Zone!)
-    const torchPositions = isZone ? [88, 268, 448, 628, 808] : [29, 102, 242, 294];
+    // 16-bit Swaying Iron Dungeon Cages anchored to the vaulted stone ceiling arches
+    const cagePositions = isZone ? [390, 810, 1290, 1640] : [74, 246];
+    for (let idx = 0; idx < cagePositions.length; idx++) {
+      const cx = cagePositions[idx] - (isZone ? camX : 0);
+      drawFxProp(ctx, 'cage', cx, isZone ? 16 : 22, 0.22, tick + idx * 13, true);
+    }
+
+    // 16-bit Iron Wall Torches mounted directly on subterranean stone & obsidian columns
+    const torchPositions = isZone ? [290, 680, 1080, 1490] : [29, 102, 242, 294];
     for (let idx = 0; idx < torchPositions.length; idx++) {
       const tx = torchPositions[idx] - (isZone ? camX : 0);
-      const ty = isZone ? 116 : idx === 0 || idx === 3 ? 112 : 118;
+      const ty = isZone ? 114 : idx === 0 || idx === 3 ? 112 : 118;
       if (tx >= -36 && tx <= NATIVE_WIDTH + 36) {
         drawLightHalo(ctx, tx, ty - 14, 28, '251, 146, 60', 0.16, tick, idx);
-        drawLightHalo(ctx, tx, GROUND_Y + 4, 22, '245, 158, 11', 0.09, tick, idx + 3);
         drawFxProp(ctx, 'torch', tx, ty, 0.19, tick + idx * 5);
       }
     }
 
-    // Bubbling Lava fissures glowing along the lower crypt chasm edge!
-    const lavaPositions = isZone ? [150, 360, 570, 770] : [58, 160, 262];
-    for (let idx = 0; idx < lavaPositions.length; idx++) {
-      const lx = lavaPositions[idx] - (isZone ? camX : 0);
-      if (lx >= -40 && lx <= NATIVE_WIDTH + 40) {
-        drawLightHalo(ctx, lx, NATIVE_HEIGHT - 12, 26, '239, 68, 68', 0.14, tick, idx);
-        drawFxProp(ctx, 'lava', lx, NATIVE_HEIGHT - 2, 0.18, tick + idx * 6);
+    // Iron Braziers lighting the underground stairs, dark grotto & lava thresholds
+    const cryptBraziers = isZone ? [190, 890, 1380, 1710] : [];
+    for (let idx = 0; idx < cryptBraziers.length; idx++) {
+      const bx = cryptBraziers[idx] - camX;
+      if (bx >= -36 && bx <= NATIVE_WIDTH + 36) {
+        drawLightHalo(ctx, bx, GROUND_Y - 18, 24, '249, 115, 22', 0.14, tick, idx + 3);
+        drawFxProp(ctx, 'brazier', bx, GROUND_Y + 2, 0.18, tick + idx * 6);
       }
     }
 
-    // Rising magma embers
-    for (let i = 0; i < 9; i++) {
-      const ex = (i * 39 + tick) % NATIVE_WIDTH;
-      const ey = GROUND_Y + 12 - ((tick + i * 19) % 108);
-      pxRect(ctx, ex, ey, 1, 2, i % 2 === 0 ? '#fb923c' : '#fde047');
+    // Rising magma embers appear once Krom reaches the magma fissures & lava waterfalls!
+    if (!isZone || camX > 880) {
+      const emberCount = !isZone || camX > 1220 ? 9 : 4;
+      for (let i = 0; i < emberCount; i++) {
+        const ex = (i * 39 + tick) % NATIVE_WIDTH;
+        const ey = GROUND_Y + 6 - ((tick + i * 19) % 104);
+        pxRect(ctx, ex, ey, 1, 2, i % 2 === 0 ? '#fb923c' : '#fde047');
+      }
     }
   } else if (stage === 'arena') {
-    // Iron Arena Braziers with dancing firelight pools on the sand!
-    const brazierPositions = isZone ? [130, 350, 570, 790] : [22, 298];
+    // 16-bit Tattered Crimson-and-Gold Gladiator Rune Banners along the perimeter coliseum walls
+    const arenaBanners = isZone ? [660, 1005, 1510, 1695] : [50, 270];
+    for (let idx = 0; idx < arenaBanners.length; idx++) {
+      const bx = arenaBanners[idx] - (isZone ? camX : 0);
+      if (!isZone) {
+        drawFxProp(ctx, 'banner', bx, 84, 0.18, tick + idx * 11, true);
+      } else {
+        drawLightHalo(ctx, bx, 118, 18, '251, 146, 60', 0.08, tick, idx);
+      }
+    }
+
+    // Heavy Iron Gladiator Braziers flanking the outer rampart walls & skull gate
+    const brazierPositions = isZone ? [402, 830, 1002, 1228, 1425, 1775] : [24, 296];
     for (let idx = 0; idx < brazierPositions.length; idx++) {
       const bx = brazierPositions[idx] - (isZone ? camX : 0);
       if (bx >= -36 && bx <= NATIVE_WIDTH + 36) {
-        drawLightHalo(ctx, bx, GROUND_Y - 22, 28, '251, 146, 60', 0.15, tick, idx);
-        drawLightHalo(ctx, bx, GROUND_Y + 3, 24, '250, 204, 21', 0.1, tick, idx + 2);
-        drawFxProp(ctx, 'brazier', bx, GROUND_Y + 2, 0.21, tick + idx * 4);
+        drawLightHalo(ctx, bx, GROUND_Y - 20, 26, '251, 146, 60', 0.15, tick, idx);
+        if (!isZone) {
+          drawFxProp(ctx, 'brazier', bx, GROUND_Y + 2, 0.20, tick + idx * 4);
+        }
       }
     }
 
+    // Carrion Crows circling above the sunlit coliseum walls
+    for (let c = 0; c < 2; c++) {
+      const speed = c === 0 ? 0.82 : 0.58;
+      const crowX = Math.floor((((tick * speed + c * 155) % (NATIVE_WIDTH + 64)) - 32));
+      const crowY = (40 + c * 14) + Math.round(Math.sin(tick * 0.07 + c * 2.4) * 3);
+      drawFxProp(ctx, 'crow', crowX, crowY + 8, 0.13, tick + c * 9);
+    }
+
     if (!isZone) {
-      drawLightHalo(ctx, 89, 108, 20, '251, 146, 60', 0.12, tick, 4);
-      drawLightHalo(ctx, 231, 108, 20, '251, 146, 60', 0.12, tick, 7);
+      drawLightHalo(ctx, 89, 108, 20, '251, 146, 60', 0.13, tick, 4);
+      drawLightHalo(ctx, 231, 108, 20, '251, 146, 60', 0.13, tick, 7);
       drawAnimatedFlame(ctx, 89, 114, tick + 4, 0.65);
       drawAnimatedFlame(ctx, 231, 114, tick + 8, 0.65);
 
@@ -341,7 +479,7 @@ function drawStageAtmosphericOverlay(
     }
 
     // Wind-blown sand streaks & floating sunlit dust motes
-    ctx.fillStyle = 'rgba(253, 230, 138, 0.34)';
+    ctx.fillStyle = 'rgba(253, 230, 138, 0.32)';
     for (let i = 0; i < 7; i++) {
       const sx = Math.floor((i * 51 + tick * 2.3) % NATIVE_WIDTH);
       const sy = GROUND_Y + 4 + ((i * 7) % 24);
@@ -352,27 +490,62 @@ function drawStageAtmosphericOverlay(
       const dy = 56 + ((i * 27 + Math.floor(tick * 0.3)) % 96);
       pxRect(ctx, dx, dy, 1, 1, 'rgba(254, 243, 199, 0.45)');
     }
-  } else {
-    // Arcane Braziers & Storm Monoliths on the Citadel Bridge
-    const sanctProps = isZone ? [180, 470, 760] : [24, 296];
-    for (let idx = 0; idx < sanctProps.length; idx++) {
-      const px = sanctProps[idx] - (isZone ? camX : 0);
-      if (px >= -36 && px <= NATIVE_WIDTH + 36) {
-        drawLightHalo(ctx, px, GROUND_Y - 24, 26, '168, 85, 247', 0.14, tick, idx);
-        drawFxProp(
-          ctx,
-          idx % 2 === 0 ? 'brazier' : 'monolith',
-          px,
-          GROUND_Y + 2,
-          0.2,
-          tick + idx * 6
-        );
+  } else if (stage === 'inferno') {
+    // Swaying Iron Cages & Crimson-Orange Hellfire Braziers along the Infernal Citadel viaduct
+    const infernoCages = isZone ? [1448, 1538] : [64, 256];
+    for (let idx = 0; idx < infernoCages.length; idx++) {
+      const cx = infernoCages[idx] - (isZone ? camX : 0);
+      if (!isZone) {
+        drawFxProp(ctx, 'cage', cx, 18, 0.22, tick + idx * 11, true);
       }
     }
 
-    // Slanting storm rain + splashing raindrop ripples on the wet flagstones!
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.32)';
-    for (let i = 0; i < 28; i++) {
+    const infernoGlows = isZone ? [132, 274, 814, 872, 1188, 1388, 1618, 1772] : [28, 160, 292];
+    for (let idx = 0; idx < infernoGlows.length; idx++) {
+      const gx = infernoGlows[idx] - (isZone ? camX : 0);
+      if (gx >= -40 && gx <= NATIVE_WIDTH + 40) {
+        drawLightHalo(ctx, gx, GROUND_Y - 24, 28, '249, 115, 22', 0.16, tick, idx);
+        if (!isZone && idx !== 1) {
+          drawFxProp(ctx, 'brazier', gx, GROUND_Y + 2, 0.19, tick + idx * 5);
+        }
+      }
+    }
+
+    // Rising hellfire embers across the moonlit bridge & lava chasm
+    for (let i = 0; i < 11; i++) {
+      const ex = (i * 31 + Math.floor(tick * 0.9)) % NATIVE_WIDTH;
+      const ey = GROUND_Y + 8 - ((tick + i * 17) % 128);
+      pxRect(ctx, ex, ey, 1, 2, i % 3 === 0 ? '#ef4444' : i % 2 === 0 ? '#fb923c' : '#fde047');
+    }
+  } else {
+    // 16-bit Swaying Iron Citadel Cages anchored to castle arches & bridge columns
+    const sanctCages = isZone ? [280, 740, 1290, 1640] : [58, 262];
+    for (let idx = 0; idx < sanctCages.length; idx++) {
+      const cx = sanctCages[idx] - (isZone ? camX : 0);
+      drawFxProp(ctx, 'cage', cx, 18, 0.22, tick + idx * 15, true);
+    }
+
+    // 16-bit Tattered War Banners on the dark gothic fortress
+    if (isZone) {
+      const sanctBanners = [360, 910, 1420, 1695];
+      for (let idx = 0; idx < sanctBanners.length; idx++) {
+        drawFxProp(ctx, 'banner', sanctBanners[idx] - camX, 74, 0.16, tick + idx * 12, true);
+      }
+    }
+
+    // 16-bit Gothic Violet-Flame Arcane Braziers lighting the storm bridge & dark sanctuary
+    const sanctBraziers = isZone ? [195, 515, 840, 1140, 1465, 1710] : [26, 294];
+    for (let idx = 0; idx < sanctBraziers.length; idx++) {
+      const px = sanctBraziers[idx] - (isZone ? camX : 0);
+      if (px >= -36 && px <= NATIVE_WIDTH + 36) {
+        drawLightHalo(ctx, px, GROUND_Y - 22, 26, '168, 85, 247', 0.15, tick, idx);
+        drawFxProp(ctx, 'arcane_brazier', px, GROUND_Y + 2, 0.20, tick + idx * 6);
+      }
+    }
+
+    // Slanting storm rain + splashing raindrop ripples on the wet flagstones
+    ctx.fillStyle = 'rgba(186, 230, 253, 0.30)';
+    for (let i = 0; i < 26; i++) {
       const rx = (((i * 37 - tick * 3) % NATIVE_WIDTH) + NATIVE_WIDTH) % NATIVE_WIDTH;
       const ry = (i * 29 + tick * 6) % (GROUND_Y + 10);
       ctx.fillRect(rx, ry, 1, 5);
@@ -383,18 +556,18 @@ function drawStageAtmosphericOverlay(
         const sx = (r * 57 + Math.floor((tick + r * 11) / 16) * 29) % (NATIVE_WIDTH - 16) + 8;
         const sy = GROUND_Y + 2 + (r % 3) * 8;
         const rw = 2 + splashPhase;
-        pxRect(ctx, sx - Math.floor(rw / 2), sy, rw, 1, 'rgba(186, 230, 253, 0.45)');
+        pxRect(ctx, sx - Math.floor(rw / 2), sy, rw, 1, 'rgba(186, 230, 253, 0.42)');
       }
     }
 
-    // Distant sheet-lightning shimmer + Jagged Forked Lightning Bolt on thunderclap!
+    // Distant sheet-lightning shimmer + Jagged Forked Lightning Bolt on thunderclap
     if (lightningFlash > 0) {
       const boltX = 72 + ((tick * 13) % 176);
       drawForkedLightningBolt(ctx, boltX, tick);
       ctx.fillStyle = `rgba(240, 249, 255, ${(lightningFlash * 0.11).toFixed(2)})`;
       ctx.fillRect(0, 0, NATIVE_WIDTH, NATIVE_HEIGHT);
     } else if (tick % 130 < 3) {
-      ctx.fillStyle = 'rgba(192, 132, 252, 0.08)';
+      ctx.fillStyle = 'rgba(192, 132, 252, 0.07)';
       ctx.fillRect(0, 0, NATIVE_WIDTH, GROUND_Y);
     }
   }
@@ -416,14 +589,19 @@ function drawStageBackground320(
   drawStageAtmosphericOverlay(ctx, stage, tick, lightningFlash, crowdExcited, false, 0);
 }
 
-function getShortTechniqueBadge(tech: TechniqueId): { label: string; color: string } {
+function getShortTechniqueBadge(
+  tech: TechniqueId,
+  lang: LanguageCode
+): { label: string; color: string } {
+  const fg = getLocalizedForge(lang);
+  const label = fg.techniques[tech]?.shortBadge ?? fg.techniques.whirlwind_edge.shortBadge;
   if (tech === 'iron_riposte') {
-    return { label: 'RIPOSTE [L1]', color: '#38bdf8' };
+    return { label, color: '#38bdf8' };
   }
   if (tech === 'sky_breaker') {
-    return { label: 'BRISE-GARDE [R1]', color: '#fb923c' };
+    return { label, color: '#fb923c' };
   }
-  return { label: 'MOULINET [C]', color: '#facc15' };
+  return { label, color: '#facc15' };
 }
 
 function drawFighter320(
@@ -438,8 +616,12 @@ function drawFighter320(
   const y = Math.round(f.y);
   if (x < -64 || x > NATIVE_WIDTH + 64) return;
 
-  const heightAboveGround = Math.max(0, GROUND_Y - y);
-  const shadowW = Math.max(12, 28 - Math.floor(heightAboveGround * 0.25));
+  const frame = selectFighterSpriteFrame(f, tick);
+  const scale = getFighterScale(f.skin);
+  const oyPx = Math.round((frame.oy ?? 0) * scale);
+
+  const heightAboveGround = Math.max(0, GROUND_Y - y - oyPx);
+  const shadowW = Math.max(10, 28 - Math.floor(heightAboveGround * 0.25));
   ctx.fillStyle = `rgba(0, 0, 0, ${(0.5 * alpha).toFixed(2)})`;
   ctx.fillRect(Math.floor(x - shadowW / 2), GROUND_Y - 2, shadowW, 4);
 
@@ -448,7 +630,6 @@ function drawFighter320(
       ? (-f.facing as 1 | -1)
       : f.facing;
 
-  const frame = selectFighterSpriteFrame(f, tick);
   const hitFlash = f.action === 'hit_stun' && f.actionTick % 3 === 1;
   const sheetCanvas = getSkinSheetCanvas(frame.sheet, f.skin, hitFlash);
 
@@ -457,7 +638,6 @@ function drawFighter320(
     return;
   }
 
-  const scale = getFighterScale(f.skin);
   const destW = Math.round(frame.w * scale);
   const destH = Math.round(frame.h * scale);
   const anchorOffsetPx = Math.round(frame.ax * scale);
@@ -466,7 +646,7 @@ function drawFighter320(
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (alpha < 1) ctx.globalAlpha = alpha;
-  ctx.translate(x, y + footSink);
+  ctx.translate(x, y + footSink + oyPx);
   if (renderDir === -1) {
     ctx.scale(-1, 1);
   }
@@ -513,7 +693,12 @@ function drawFighter320(
     ctx.fillStyle = '#f0f9ff';
     ctx.fillRect(9, -Math.round(destH * 0.78), 1, Math.round(destH * 0.38));
   } else if (f.action === 'boss_cast') {
-    const orbColor = f.skin === 'vorgath' ? '#f97316' : '#c084fc';
+    const orbColor =
+      f.skin === 'thalgrim'
+        ? '#38bdf8'
+        : f.skin === 'vorgath' || f.skin === 'baelgor'
+        ? '#f97316'
+        : '#c084fc';
     pxRect(ctx, 14, -Math.round(destH * 0.68), 8, 8, orbColor);
     pxRect(ctx, 16, -Math.round(destH * 0.68) + 2, 4, 4, '#ffffff');
   }
@@ -521,7 +706,11 @@ function drawFighter320(
   ctx.restore();
 }
 
-function drawGoblinCleaner320(ctx: CanvasRenderingContext2D, state: MatchState): void {
+function drawGoblinCleaner320(
+  ctx: CanvasRenderingContext2D,
+  state: MatchState,
+  lang: LanguageCode
+): void {
   const g = state.goblin;
   if (!g.active || g.phase === 'done') return;
 
@@ -553,7 +742,8 @@ function drawGoblinCleaner320(ctx: CanvasRenderingContext2D, state: MatchState):
     ctx.restore();
 
     if (g.phase === 'laughing') {
-      drawCrispText(ctx, 'HEH HEH!', gx, gy - dh - 10, '#bef264', 8, 'center');
+      const ct = getLocalizedCombatText(lang);
+      drawCrispText(ctx, ct.goblinLaugh, gx, gy - dh - 10, '#bef264', 8, 'center', true, 76);
     }
     return;
   }
@@ -799,16 +989,17 @@ function drawHudPortrait(
 function drawCombatHud320(
   ctx: CanvasRenderingContext2D,
   state: MatchState,
-  equippedTechnique: TechniqueId
+  equippedTechnique: TechniqueId,
+  lang: LanguageCode
 ): void {
   pxRect(ctx, 0, 0, NATIVE_WIDTH, 32, 'rgba(9, 11, 16, 0.88)');
   pxRect(ctx, 0, 32, NATIVE_WIDTH, 1, '#78350f');
   pxRect(ctx, 0, 33, NATIVE_WIDTH, 1, '#09090b');
 
   drawHudPortrait(ctx, state.p1.skin, 4, 4, false);
-  drawCrispText(ctx, state.p1.name.slice(0, 6), 32, 3, '#fef3c7', 8, 'left');
-  const techBadge = getShortTechniqueBadge(equippedTechnique);
-  drawCrispText(ctx, techBadge.label, 126, 4, techBadge.color, 7, 'right');
+  drawCrispText(ctx, state.p1.name.slice(0, 6), 32, 3, '#fef3c7', 8, 'left', true, 34);
+  const techBadge = getShortTechniqueBadge(equippedTechnique, lang);
+  drawCrispText(ctx, techBadge.label, 126, 4, techBadge.color, 7, 'right', true, 60);
 
   pxRect(ctx, 32, 14, 94, 8, '#1f2937');
   pxRect(ctx, 32, 14, 94, 1, '#4b5563');
@@ -836,12 +1027,14 @@ function drawCombatHud320(
   drawHudPortrait(ctx, state.p2.skin, NATIVE_WIDTH - 28, 4, true);
   drawCrispText(
     ctx,
-    state.p2.name.slice(0, 10),
+    state.p2.name.slice(0, 12),
     NATIVE_WIDTH - 32,
     3,
     '#fef3c7',
     8,
-    'right'
+    'right',
+    true,
+    92
   );
 
   pxRect(ctx, NATIVE_WIDTH - 126, 14, 94, 8, '#1f2937');
@@ -872,7 +1065,17 @@ function drawCombatHud320(
     pxRect(ctx, 24, 42, NATIVE_WIDTH - 48, 20, 'rgba(12, 14, 18, 0.90)');
     pxRect(ctx, 24, 42, NATIVE_WIDTH - 48, 2, '#d97706');
     pxRect(ctx, 24, 60, NATIVE_WIDTH - 48, 2, '#92400e');
-    drawCrispText(ctx, state.bannerText, 160, 47, '#fef08a', 9, 'center');
+    drawCrispText(
+      ctx,
+      state.bannerText,
+      160,
+      47,
+      '#fef08a',
+      9,
+      'center',
+      true,
+      NATIVE_WIDTH - 60
+    );
   }
 }
 
@@ -910,6 +1113,7 @@ function drawZoneTraversal320(
   equippedTechnique: TechniqueId
 ): void {
   const t = TRANSLATIONS[settings.language];
+  const ct = getLocalizedCombatText(settings.language);
   const goreMode = settings.goreMode;
   const camX = Math.round(zone.cameraX);
 
@@ -937,20 +1141,20 @@ function drawZoneTraversal320(
     drawFallbackProceduralStage(ctx, zone.stage);
   }
 
-  // Boss Arena Gate Archway at the end of the 960px zone!
-  const gateScreenX = Math.round(ZONE_WORLD_WIDTH - 26 - camX);
-  if (gateScreenX < NATIVE_WIDTH + 30) {
-    pxRect(ctx, gateScreenX - 16, GROUND_Y - 78, 32, 78, '#090b10');
-    pxRect(ctx, gateScreenX - 20, GROUND_Y - 84, 6, 84, '#57534e');
-    pxRect(ctx, gateScreenX + 14, GROUND_Y - 84, 6, 84, '#57534e');
-    pxRect(ctx, gateScreenX - 22, GROUND_Y - 90, 44, 8, '#78716c');
-    drawLightHalo(ctx, gateScreenX - 17, GROUND_Y - 90, 18, '251, 146, 60', 0.16, zone.tick, 1);
-    drawLightHalo(ctx, gateScreenX + 17, GROUND_Y - 90, 18, '251, 146, 60', 0.16, zone.tick, 4);
-    drawAnimatedFlame(ctx, gateScreenX - 17, GROUND_Y - 86, zone.tick, 0.8);
-    drawAnimatedFlame(ctx, gateScreenX + 17, GROUND_Y - 86, zone.tick + 5, 0.8);
-  }
-
   drawStageAtmosphericOverlay(ctx, zone.stage, zone.tick, zone.lightningFlash, false, true, camX);
+
+  // Authentic 16-bit Pixel-Art Spiked Iron Portcullis Gates at the Bastion Thresholds & Boss Gate!
+  for (const gateWorldX of ZONE_WALL_GATES) {
+    const isLocked = zone.lockX <= gateWorldX + 4;
+    drawPixelPortcullisGate320(ctx, gateWorldX, isLocked, zone.tick, camX);
+  }
+  drawPixelPortcullisGate320(
+    ctx,
+    ZONE_WORLD_WIDTH - 48,
+    zone.lockX < ZONE_WORLD_WIDTH - 40,
+    zone.tick,
+    camX
+  );
 
   // Persistent crimson floor splatters in Normal/Gore modes
   drawFloorDecals320(ctx, zone.floorDecals, goreMode, camX);
@@ -972,23 +1176,76 @@ function drawZoneTraversal320(
     }
   }
 
-  // Draw living minions + compact overhead HP bar
+  // Draw living minions + compact overhead HP bar (gold-framed for Co-op Boss Finale!)
   for (const inst of zone.enemies) {
     if (inst.fighter.action !== 'dead' && inst.fighter.action !== 'decapitated') {
       drawFighter320(ctx, inst.fighter, zone.tick, camX, 1);
       const sx = Math.round(inst.fighter.x - camX);
-      if (sx >= -10 && sx <= NATIVE_WIDTH + 10) {
-        const barW = 26;
-        const barY = GROUND_Y - 66;
-        pxRect(ctx, sx - 13, barY, barW, 4, '#090b10');
+      if (sx >= -14 && sx <= NATIVE_WIDTH + 14) {
+        const isBoss = Boolean(inst.isBossFinale);
+        const barW = isBoss ? 44 : 26;
+        const flyLift =
+          inst.fighter.skin === 'cave_bat'
+            ? 14
+            : inst.fighter.skin === 'spectral_wraith'
+            ? 6
+            : isBoss
+            ? 8
+            : 0;
+        const barY = GROUND_Y - 66 - flyLift;
+        const barX = sx - Math.floor(barW / 2);
+        if (isBoss) {
+          pxRect(ctx, barX - 1, barY - 1, barW + 2, 6, '#f59e0b');
+          drawCrispText(ctx, inst.fighter.name, sx, barY - 10, '#fde047', 7, 'center', true, 72);
+        }
+        pxRect(ctx, barX, barY, barW, 4, '#090b10');
         const fillW = Math.max(1, Math.round((inst.fighter.hp / inst.fighter.maxHp) * (barW - 2)));
-        pxRect(ctx, sx - 12, barY + 1, fillW, 2, '#ef4444');
+        pxRect(ctx, barX + 1, barY + 1, fillW, 2, isBoss ? '#f59e0b' : '#ef4444');
       }
     }
   }
 
-  // Draw Krom with active Botte Secrète trail!
-  drawFighter320(ctx, zone.p1, zone.tick, camX, 1, equippedTechnique);
+  // Draw Co-op Partner (J2) & Krom (J1) with active Botte Secrète trails!
+  if (zone.isCoop && zone.p2) {
+    const p2Fade = zone.p2.hp <= 0 ? (zone.tick % 16 < 8 ? 0.55 : 0.85) : 1;
+    drawFighter320(ctx, zone.p2, zone.tick, camX, p2Fade, 'iron_riposte');
+  }
+
+  const p1Fade =
+    zone.isCoop && zone.p1.hp <= 0 ? (zone.tick % 16 < 8 ? 0.55 : 0.85) : 1;
+  drawFighter320(ctx, zone.p1, zone.tick, camX, p1Fade, equippedTechnique);
+
+  // Crisp J1 / J2 overhead tags & SOS revive prompt in Co-op!
+  if (zone.isCoop && zone.p2) {
+    const p1Sx = Math.round(zone.p1.x - camX);
+    const p2Sx = Math.round(zone.p2.x - camX);
+    if (p1Sx >= 6 && p1Sx <= NATIVE_WIDTH - 6) {
+      drawCrispText(
+        ctx,
+        zone.p1.hp <= 0 ? 'SOS [D]' : 'J1',
+        p1Sx,
+        GROUND_Y - 68,
+        zone.p1.hp <= 0 ? '#4ade80' : '#fbbf24',
+        7,
+        'center',
+        true,
+        44
+      );
+    }
+    if (p2Sx >= 6 && p2Sx <= NATIVE_WIDTH - 6) {
+      drawCrispText(
+        ctx,
+        zone.p2.hp <= 0 ? 'SOS [D]' : 'J2',
+        p2Sx,
+        GROUND_Y - 68,
+        zone.p2.hp <= 0 ? '#4ade80' : '#38bdf8',
+        7,
+        'center',
+        true,
+        44
+      );
+    }
+  }
 
   // Localized weapon contact slashes, sparks & arterial sprays!
   drawImpactEffects320(ctx, zone.impacts, goreMode, zone.tick, camX);
@@ -1004,78 +1261,160 @@ function drawZoneTraversal320(
   for (const ft of zone.floatingTexts) {
     const fx = Math.round(ft.x - camX);
     if (fx >= 8 && fx <= NATIVE_WIDTH - 8) {
-      drawCrispText(ctx, ft.text, fx, Math.round(ft.y), ft.color, 8, 'center');
+      drawCrispText(ctx, ft.text, fx, Math.round(ft.y), ft.color, 8, 'center', true, 120);
     }
   }
 
   ctx.restore();
 
-  // Top Beat-'em-up Arcade HUD (Krom Left, Score + Combo Center, Zone Progress Right)
+  // Top Beat-'em-up Arcade HUD (Solo vs Dual Co-op 2P Layout)
   pxRect(ctx, 0, 0, NATIVE_WIDTH, 32, 'rgba(9, 11, 16, 0.88)');
   pxRect(ctx, 0, 32, NATIVE_WIDTH, 1, '#78350f');
 
-  drawHudPortrait(ctx, 'krom', 4, 4, false);
-  drawCrispText(ctx, 'KROM', 32, 3, '#fef3c7', 8, 'left');
-  const techBadge = getShortTechniqueBadge(equippedTechnique);
-  drawCrispText(ctx, techBadge.label, 120, 4, techBadge.color, 7, 'right');
-  pxRect(ctx, 32, 14, 88, 8, '#1f2937');
-  const p1W = Math.max(0, Math.round((zone.p1.hp / zone.p1.maxHp) * 86));
-  if (p1W > 0) {
-    pxRect(ctx, 33, 15, p1W, 6, '#dc2626');
-    pxRect(ctx, 33, 15, p1W, 2, '#f87171');
-  }
-  const p1StamW = Math.max(0, Math.round((zone.p1.stamina / zone.p1.maxStamina) * 52));
-  pxRect(ctx, 32, 24, 52, 4, '#18181b');
-  pxRect(ctx, 32, 24, p1StamW, 3, '#38bdf8');
-  const p1RageW = Math.max(0, Math.round((zone.p1.rage / 100) * 32));
-  pxRect(ctx, 88, 24, 32, 4, '#18181b');
-  pxRect(ctx, 88, 24, p1RageW, 3, '#f59e0b');
+  if (zone.isCoop && zone.p2) {
+    // J1 (Krom) Compact HUD (x = 4..108)
+    drawHudPortrait(ctx, 'krom', 4, 4, false);
+    drawCrispText(ctx, 'J1 KROM', 30, 3, '#fef3c7', 7, 'left', true, 76);
+    pxRect(ctx, 30, 13, 76, 8, '#1f2937');
+    const p1W = Math.max(0, Math.round((zone.p1.hp / zone.p1.maxHp) * 74));
+    if (p1W > 0) {
+      pxRect(ctx, 31, 14, p1W, 6, '#dc2626');
+      pxRect(ctx, 31, 14, p1W, 2, '#f87171');
+    }
+    const p1StamW = Math.max(0, Math.round((zone.p1.stamina / zone.p1.maxStamina) * 46));
+    pxRect(ctx, 30, 23, 46, 4, '#18181b');
+    pxRect(ctx, 30, 23, p1StamW, 3, '#38bdf8');
+    const p1RageW = Math.max(0, Math.round((zone.p1.rage / 100) * 26));
+    pxRect(ctx, 80, 23, 26, 4, '#18181b');
+    pxRect(ctx, 80, 23, p1RageW, 3, '#f59e0b');
 
-  // Center Score & Combo
-  drawCrispText(ctx, `${t.scoreLabel} ${formatScore6(zone.score)}`, 166, 4, '#fef08a', 8, 'center');
-  if (zone.comboCount >= 2) {
-    drawCrispText(ctx, `COMBO x${zone.comboCount}`, 166, 17, '#fb923c', 8, 'center');
+    // J2 (Kaelen / Allié AKA) Compact HUD (x = 112..216)
+    drawHudPortrait(ctx, 'rival_aka', 112, 4, false);
+    drawCrispText(ctx, `J2 ${zone.p2.name}`, 138, 3, '#7dd3fc', 7, 'left', true, 76);
+    pxRect(ctx, 138, 13, 76, 8, '#1f2937');
+    const p2W = Math.max(0, Math.round((zone.p2.hp / zone.p2.maxHp) * 74));
+    if (p2W > 0) {
+      pxRect(ctx, 139, 14, p2W, 6, '#0284c7');
+      pxRect(ctx, 139, 14, p2W, 2, '#38bdf8');
+    }
+    const p2StamW = Math.max(0, Math.round((zone.p2.stamina / zone.p2.maxStamina) * 46));
+    pxRect(ctx, 138, 23, 46, 4, '#18181b');
+    pxRect(ctx, 138, 23, p2StamW, 3, '#4ade80');
+    const p2RageW = Math.max(0, Math.round((zone.p2.rage / 100) * 26));
+    pxRect(ctx, 188, 23, 26, 4, '#18181b');
+    pxRect(ctx, 188, 23, p2RageW, 3, '#f59e0b');
+
+    // Right Co-op Horde Counter & Shared Score (x = 220..314)
+    drawCrispText(
+      ctx,
+      `COOP · ${formatScore6(zone.score)}`,
+      NATIVE_WIDTH - 6,
+      4,
+      '#fef08a',
+      7,
+      'right',
+      true,
+      94
+    );
+    drawCrispText(
+      ctx,
+      `${t.zoneRemainingLabel} ${zone.slainCount}/${zone.totalEnemies}`,
+      NATIVE_WIDTH - 6,
+      17,
+      '#cbd5e1',
+      7,
+      'right',
+      true,
+      94
+    );
   } else {
-    const progressPct = Math.min(100, Math.round((zone.p1.x / (ZONE_WORLD_WIDTH - 48)) * 100));
-    pxRect(ctx, 130, 19, 72, 5, '#1f2937');
-    pxRect(ctx, 131, 20, Math.round((70 * progressPct) / 100), 3, '#f59e0b');
+    drawHudPortrait(ctx, 'krom', 4, 4, false);
+    drawCrispText(ctx, 'KROM', 32, 3, '#fef3c7', 8, 'left', true, 30);
+    const techBadge = getShortTechniqueBadge(equippedTechnique, settings.language);
+    drawCrispText(ctx, techBadge.label, 120, 4, techBadge.color, 7, 'right', true, 56);
+    pxRect(ctx, 32, 14, 88, 8, '#1f2937');
+    const p1W = Math.max(0, Math.round((zone.p1.hp / zone.p1.maxHp) * 86));
+    if (p1W > 0) {
+      pxRect(ctx, 33, 15, p1W, 6, '#dc2626');
+      pxRect(ctx, 33, 15, p1W, 2, '#f87171');
+    }
+    const p1StamW = Math.max(0, Math.round((zone.p1.stamina / zone.p1.maxStamina) * 52));
+    pxRect(ctx, 32, 24, 52, 4, '#18181b');
+    pxRect(ctx, 32, 24, p1StamW, 3, '#38bdf8');
+    const p1RageW = Math.max(0, Math.round((zone.p1.rage / 100) * 32));
+    pxRect(ctx, 88, 24, 32, 4, '#18181b');
+    pxRect(ctx, 88, 24, p1RageW, 3, '#f59e0b');
+
+    // Center Score & Combo
+    drawCrispText(
+      ctx,
+      `${t.scoreLabel} ${formatScore6(zone.score)}`,
+      166,
+      4,
+      '#fef08a',
+      8,
+      'center',
+      true,
+      84
+    );
+    if (zone.comboCount >= 2) {
+      drawCrispText(ctx, `COMBO x${zone.comboCount}`, 166, 17, '#fb923c', 8, 'center', true, 84);
+    } else {
+      const progressPct = Math.min(100, Math.round((zone.p1.x / (ZONE_WORLD_WIDTH - 48)) * 100));
+      pxRect(ctx, 130, 19, 72, 5, '#1f2937');
+      pxRect(ctx, 131, 20, Math.round((70 * progressPct) / 100), 3, '#f59e0b');
+    }
+
+    // Right Zone Minion Counter (Localized Act Word & Remaining Label!)
+    drawCrispText(
+      ctx,
+      `${ct.actWord} ${zone.actIndex + 1}`,
+      NATIVE_WIDTH - 6,
+      4,
+      '#fbbf24',
+      8,
+      'right',
+      true,
+      96
+    );
+    drawCrispText(
+      ctx,
+      `${t.zoneRemainingLabel} ${zone.slainCount}/${zone.totalEnemies}`,
+      NATIVE_WIDTH - 6,
+      17,
+      '#cbd5e1',
+      8,
+      'right',
+      true,
+      102
+    );
   }
 
-  // Right Zone Minion Counter
-  drawCrispText(
-    ctx,
-    `ACTE ${zone.actIndex + 1}`,
-    NATIVE_WIDTH - 6,
-    4,
-    '#fbbf24',
-    8,
-    'right'
-  );
-  drawCrispText(
-    ctx,
-    `${t.zoneRemainingLabel} ${zone.slainCount}/${zone.totalEnemies}`,
-    NATIVE_WIDTH - 6,
-    17,
-    '#cbd5e1',
-    8,
-    'right'
-  );
-
-  // Flashing Double Dragon "GO / AVANCEZ ▶▶" Arrow when current wave is clear!
+  // Flashing "GO / AVANCEZ ▶▶" Arrow when current arena pocket is clear!
   const anyAlive = zone.enemies.some(
     (e) => e.fighter.action !== 'dead' && e.fighter.action !== 'decapitated'
   );
   if ((!anyAlive || zone.goArrowTimer > 0) && !zone.zoneCompleted && zone.tick % 24 < 16) {
-    pxRect(ctx, NATIVE_WIDTH - 92, 38, 86, 18, 'rgba(15, 23, 42, 0.92)');
-    pxRect(ctx, NATIVE_WIDTH - 92, 38, 86, 2, '#4ade80');
-    drawCrispText(ctx, t.zoneGoPrompt, NATIVE_WIDTH - 49, 43, '#4ade80', 9, 'center');
+    pxRect(ctx, NATIVE_WIDTH - 96, 38, 90, 18, 'rgba(15, 23, 42, 0.92)');
+    pxRect(ctx, NATIVE_WIDTH - 96, 38, 90, 2, '#4ade80');
+    drawCrispText(ctx, t.zoneGoPrompt, NATIVE_WIDTH - 51, 43, '#4ade80', 8, 'center', true, 84);
   }
 
   if (zone.bannerTimer > 0 && zone.bannerText) {
     pxRect(ctx, 20, 42, NATIVE_WIDTH - 40, 20, 'rgba(12, 14, 18, 0.90)');
     pxRect(ctx, 20, 42, NATIVE_WIDTH - 40, 2, '#d97706');
     pxRect(ctx, 20, 60, NATIVE_WIDTH - 40, 2, '#92400e');
-    drawCrispText(ctx, zone.bannerText, 160, 47, '#fef08a', 8, 'center');
+    drawCrispText(
+      ctx,
+      zone.bannerText,
+      160,
+      47,
+      '#fef08a',
+      8,
+      'center',
+      true,
+      NATIVE_WIDTH - 52
+    );
   }
 }
 
@@ -1130,7 +1469,17 @@ function drawBootloaderScreen(
   }
 
   pxRect(ctx, 0, NATIVE_HEIGHT - 24, NATIVE_WIDTH, 24, '#111622');
-  drawCrispText(ctx, t.bootloaderPrompt, 160, NATIVE_HEIGHT - 17, '#e2e8f0', 8, 'center');
+  drawCrispText(
+    ctx,
+    t.bootloaderPrompt,
+    160,
+    NATIVE_HEIGHT - 17,
+    '#e2e8f0',
+    8,
+    'center',
+    true,
+    NATIVE_WIDTH - 16
+  );
 }
 
 function drawInScreenTitleMenu(
@@ -1140,17 +1489,40 @@ function drawInScreenTitleMenu(
   settings: AkaSystemSettings
 ): void {
   const t = TRANSLATIONS[settings.language];
+  const fg = getLocalizedForge(settings.language);
   pxRect(ctx, 16, 16, NATIVE_WIDTH - 32, NATIVE_HEIGHT - 32, 'rgba(9, 11, 16, 0.88)');
   pxRect(ctx, 16, 16, NATIVE_WIDTH - 32, 2, '#d97706');
   pxRect(ctx, 16, NATIVE_HEIGHT - 18, NATIVE_WIDTH - 32, 2, '#d97706');
 
-  drawCrispText(ctx, t.titleSubtitle, 160, 24, '#f59e0b', 7, 'center');
-  drawCrispText(ctx, t.brandTitle.toUpperCase(), 160, 38, '#ffffff', 11, 'center');
+  drawCrispText(ctx, t.titleSubtitle, 160, 24, '#f59e0b', 7, 'center', true, 206);
+  drawCrispText(
+    ctx,
+    `◀ ${settings.language.toUpperCase()} ▶`,
+    NATIVE_WIDTH - 22,
+    24,
+    '#38bdf8',
+    7,
+    'right',
+    true,
+    46
+  );
+  drawCrispText(
+    ctx,
+    t.brandTitle.toUpperCase(),
+    160,
+    38,
+    '#ffffff',
+    11,
+    'center',
+    true,
+    NATIVE_WIDTH - 48
+  );
 
   const options = [
     t.titleMenuCampaign,
+    t.titleMenuCoop2P,
     t.titleMenuQuickAi,
-    `${t.titleMenuForge} (${progression.steelShards} Écl.)`,
+    `${t.titleMenuForge} (${progression.steelShards} ${fg.shardUnitShort})`,
     t.titleMenuCodex,
     t.titleMenuLocal2P,
     t.titleMenuWifiUsb,
@@ -1158,30 +1530,52 @@ function drawInScreenTitleMenu(
 
   options.forEach((label, idx) => {
     const active = idx === titleCursor;
-    const ry = 66 + idx * 20;
+    const ry = 63 + idx * 18;
     if (active) {
-      pxRect(ctx, 28, ry - 2, NATIVE_WIDTH - 56, 16, '#b45309');
+      pxRect(ctx, 28, ry - 2, NATIVE_WIDTH - 56, 15, '#b45309');
     }
     drawCrispText(
       ctx,
       active ? `▶ ${label}` : `  ${label}`,
       36,
       ry,
-      active ? '#ffffff' : idx === 2 ? '#fde68a' : idx === 3 ? '#7dd3fc' : '#cbd5e1',
+      active
+        ? '#ffffff'
+        : idx === 1
+        ? '#86efac'
+        : idx === 3
+        ? '#fde68a'
+        : idx === 4
+        ? '#7dd3fc'
+        : '#cbd5e1',
       8,
-      'left'
+      'left',
+      true,
+      NATIVE_WIDTH - 72
     );
   });
 
-  drawCrispText(ctx, t.titleControlHint, 160, 204, '#94a3b8', 7, 'center', false);
+  drawCrispText(
+    ctx,
+    t.titleControlHint,
+    160,
+    204,
+    '#94a3b8',
+    7,
+    'center',
+    false,
+    NATIVE_WIDTH - 44
+  );
 }
 
 function drawAkaForgeScreen320(
   ctx: CanvasRenderingContext2D,
   progression: ProgressionState,
   forgeUi: AkaForgeUiState,
-  tick: number
+  tick: number,
+  settings: AkaSystemSettings
 ): void {
+  const fg = getLocalizedForge(settings.language);
   pxRect(ctx, 8, 8, NATIVE_WIDTH - 16, NATIVE_HEIGHT - 16, 'rgba(9, 11, 16, 0.95)');
   pxRect(ctx, 8, 8, NATIVE_WIDTH - 16, 2, '#f59e0b');
   pxRect(ctx, 8, NATIVE_HEIGHT - 10, NATIVE_WIDTH - 16, 2, '#f59e0b');
@@ -1197,21 +1591,24 @@ function drawAkaForgeScreen320(
     }
   }
 
-  drawCrispText(ctx, 'FORGE DE BIVOUAC & BOTTES SECRÈTES', 16, 14, '#fef08a', 8, 'left');
+  drawCrispText(ctx, fg.headerTitle, 16, 14, '#fef08a', 8, 'left', true, 246);
   drawCrispText(
     ctx,
-    `ÉCLATS D’ACIER : ${progression.steelShards}`,
+    `${fg.shardsLabel} : ${progression.steelShards}`,
     16,
     27,
     '#38bdf8',
     8,
-    'left'
+    'left',
+    true,
+    246
   );
 
   // 4 Upgrades (0..3) + 3 Secret Techniques (4..6)
   let selectedDesc = '';
 
   FORGE_UPGRADES.forEach((up, idx) => {
+    const locUp = fg.upgrades[up.key];
     const active = forgeUi.cursor === idx;
     const rank = progression[up.key];
     const isMax = rank >= 4;
@@ -1222,33 +1619,38 @@ function drawAkaForgeScreen320(
     if (active) {
       pxRect(ctx, 14, y - 1, NATIVE_WIDTH - 28, 15, '#1e293b');
       pxRect(ctx, 14, y - 1, 3, 15, '#f59e0b');
-      selectedDesc = `${up.title} (${up.formatEffect(rank)}) : ${up.description}`;
+      selectedDesc = `${locUp.title} (${locUp.formatEffect(rank)}) : ${locUp.shortDesc}`;
     }
 
     const pips = '■'.repeat(rank) + '·'.repeat(4 - rank);
     drawCrispText(
       ctx,
-      `${active ? '▶' : ' '} ${up.title} [${pips}]`,
+      `${active ? '▶' : ' '} ${locUp.title} [${pips}]`,
       20,
       y + 1,
       active ? '#ffffff' : '#cbd5e1',
       8,
-      'left'
+      'left',
+      true,
+      214
     );
     drawCrispText(
       ctx,
-      isMax ? 'MAX' : `${cost} Écl.`,
+      isMax ? fg.maxTag : `${cost} ${fg.shardUnitShort}`,
       NATIVE_WIDTH - 18,
       y + 1,
       isMax ? '#4ade80' : canAfford ? '#fbbf24' : '#64748b',
       8,
-      'right'
+      'right',
+      true,
+      64
     );
   });
 
-  drawCrispText(ctx, 'BOTTES SECRÈTES (1 ÉQUIPÉE EN COMBAT)', 16, 115, '#f59e0b', 7, 'left');
+  drawCrispText(ctx, fg.secretHeader, 16, 115, '#f59e0b', 7, 'left', true, 286);
 
   SWORD_TECHNIQUES.forEach((tech, tIdx) => {
+    const locTech = fg.techniques[tech.id];
     const rowIdx = 4 + tIdx;
     const active = forgeUi.cursor === rowIdx;
     const unlocked = progression.unlockedTechniques.includes(tech.id);
@@ -1259,24 +1661,26 @@ function drawAkaForgeScreen320(
     if (active) {
       pxRect(ctx, 14, y - 1, NATIVE_WIDTH - 28, 15, '#1e293b');
       pxRect(ctx, 14, y - 1, 3, 15, '#38bdf8');
-      selectedDesc = `${tech.inputHint} — ${tech.summary}`;
+      selectedDesc = `${locTech.inputHint} — ${locTech.shortSummary}`;
     }
 
     drawCrispText(
       ctx,
-      `${active ? '▶' : ' '} ${tech.name}`,
+      `${active ? '▶' : ' '} ${locTech.name}`,
       20,
       y + 1,
       equipped ? '#fde047' : active ? '#ffffff' : '#cbd5e1',
       8,
-      'left'
+      'left',
+      true,
+      196
     );
 
     const rightTag = equipped
-      ? '★ ÉQUIPÉE'
+      ? fg.equippedTag
       : unlocked
-      ? 'A: ÉQUIPER'
-      : `${tech.unlockCost} Écl.`;
+      ? fg.equipPrompt
+      : `${tech.unlockCost} ${fg.shardUnitShort}`;
     const rightColor = equipped
       ? '#4ade80'
       : unlocked
@@ -1285,14 +1689,24 @@ function drawAkaForgeScreen320(
       ? '#fbbf24'
       : '#64748b';
 
-    drawCrispText(ctx, rightTag, NATIVE_WIDTH - 18, y + 1, rightColor, 8, 'right');
+    drawCrispText(
+      ctx,
+      rightTag,
+      NATIVE_WIDTH - 18,
+      y + 1,
+      rightColor,
+      8,
+      'right',
+      true,
+      84
+    );
   });
 
-  // Bottom Description & Feedback Box
+  // Bottom Description & Feedback Box (strictly bounded inside x = 14..306, inner maxWidth = 280px!)
   pxRect(ctx, 14, 180, NATIVE_WIDTH - 28, 34, '#0c1018');
   pxRect(ctx, 14, 180, NATIVE_WIDTH - 28, 1, '#334155');
   const infoText = forgeUi.feedbackText || selectedDesc;
-  const lines = wrapLines(infoText, 48).slice(0, 2);
+  const lines = wrapTextPx(ctx, infoText, 280, 7, false).slice(0, 2);
   lines.forEach((ln, i) => {
     drawCrispText(
       ctx,
@@ -1302,49 +1716,49 @@ function drawAkaForgeScreen320(
       forgeUi.feedbackText ? '#4ade80' : '#e2e8f0',
       7,
       'left',
-      false
+      false,
+      280
     );
   });
 
   drawCrispText(
     ctx,
-    `▲/▼: Choisir · A: Forger/Équiper · L1: Aide · B/RUN: ${forgeUi.continueLabel}`,
+    fg.footerFormat(forgeUi.continueLabel),
     160,
     218,
     '#fbbf24',
     7,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 24
   );
 }
 
 function drawAkaCodexScreen320(
   ctx: CanvasRenderingContext2D,
   codexUi: AkaCodexUiState,
-  equippedTechnique: TechniqueId
+  equippedTechnique: TechniqueId,
+  settings: AkaSystemSettings
 ): void {
+  const cxLoc = getLocalizedCodex(settings.language);
   pxRect(ctx, 8, 8, NATIVE_WIDTH - 16, NATIVE_HEIGHT - 16, 'rgba(9, 11, 16, 0.95)');
   pxRect(ctx, 8, 8, NATIVE_WIDTH - 16, 2, '#38bdf8');
   pxRect(ctx, 8, NATIVE_HEIGHT - 10, NATIVE_WIDTH - 16, 2, '#38bdf8');
 
-  const pageTitles = [
-    '1/4 · MOUVEMENTS & ESQUIVES',
-    '2/4 · COUPS D’ÉPÉE OFFENSIFS',
-    '3/4 · GARDE, PARADES & BOSS',
-    '4/4 · BOTTES SECRÈTES & FATAL',
-  ];
-
   drawCrispText(
     ctx,
-    `◀ ${pageTitles[codexUi.page] ?? pageTitles[0]} ▶`,
+    `◀ ${cxLoc.pageTitles[codexUi.page] ?? cxLoc.pageTitles[0]} ▶`,
     160,
     15,
     '#7dd3fc',
     8,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 28
   );
   pxRect(ctx, 16, 28, NATIVE_WIDTH - 32, 1, '#1e293b');
 
-  // Right-side Live Animated Krom Demo Box!
+  // Right-side Live Animated Krom Demo Box (x = 226..306)
   pxRect(ctx, 226, 36, 80, 114, '#111622');
   pxRect(ctx, 226, 36, 80, 1, '#334155');
   pxRect(ctx, 226, 134, 80, 16, '#1e293b');
@@ -1356,10 +1770,13 @@ function drawAkaCodexScreen320(
     ['spin_decap', 'cleave_overhead', 'block_high'],
   ];
   const cycle = demoActionsByPage[codexUi.page] ?? demoActionsByPage[0];
-  const demoAction = cycle[Math.floor(codexUi.tick / 36) % cycle.length];
-  const subTick = codexUi.tick % 36;
+  const demoPeriod = 96;
+  const demoAction = cycle[Math.floor(codexUi.tick / demoPeriod) % cycle.length];
+  const subTick = codexUi.tick % demoPeriod;
   const jumpOffset =
-    demoAction === 'jump' ? Math.round(Math.sin((subTick / 36) * Math.PI) * 20) : 0;
+    demoAction === 'jump'
+      ? Math.round(Math.sin((Math.min(subTick, 64) / 64) * Math.PI) * 20)
+      : 0;
 
   const dummyKrom: FighterState = {
     id: 'p1',
@@ -1376,7 +1793,7 @@ function drawAkaCodexScreen320(
     maxStamina: 100,
     rage: 100,
     action: demoAction,
-    actionTick: Math.min(subTick, 24),
+    actionTick: Math.min(subTick >> 1, 24),
     actionDuration: 28,
     hitApplied: false,
     roundsWon: 0,
@@ -1389,104 +1806,79 @@ function drawAkaCodexScreen320(
   ctx.beginPath();
   ctx.rect(227, 37, 78, 112);
   ctx.clip();
-  // Translate GROUND_Y (196) -> 134 inside demo box
   ctx.translate(0, 134 - GROUND_Y);
   dummyKrom.y = GROUND_Y - jumpOffset;
   drawFighter320(ctx, dummyKrom, codexUi.tick, 0, 1, equippedTechnique);
   ctx.restore();
 
-  const demoLabels: Record<string, string> = {
-    walk_fwd: 'Marche',
-    crouch: 'Accroupi',
-    roll_fwd: 'Roulade D',
-    roll_back: 'Recul D',
-    jump: 'Saut ▲',
-    slash_high: 'Taille A',
-    thrust_mid: 'Estoc ▶+A',
-    sweep_low: 'Balayage B',
-    cleave_overhead: 'Fendoir R1',
-    block_high: 'Parade L1',
-    spin_decap: 'Moulinet C',
-  };
-  drawCrispText(ctx, demoLabels[demoAction] ?? 'Krom', 266, 138, '#fde047', 7, 'center');
+  drawCrispText(
+    ctx,
+    cxLoc.demoLabels[demoAction] ?? 'Krom',
+    266,
+    138,
+    '#fde047',
+    7,
+    'center',
+    true,
+    74
+  );
 
-  // Left-side Crisp Structured Move Rows (x = 16..220)
-  const pages: { cmd: string; desc: string }[][] = [
-    [
-      { cmd: '◀ / ▶ (Q / D)', desc: 'Approcher ou reculer en garde' },
-      { cmd: '▲ Haut (Z / W)', desc: 'Saut : évite Balayage & Onde basse' },
-      { cmd: '▼ Bas (S)', desc: 'Accroupi : passe sous Taille & Moulinet' },
-      { cmd: 'Bouton D (E)', desc: 'Roulade invincible à travers l’ennemi' },
-    ],
-    [
-      { cmd: 'Bouton A (F / Esp.)', desc: 'Taille Haute vive (rapide, fiable)' },
-      { cmd: '▶ Avant + A', desc: 'Fente d’Estoc à longue portée' },
-      { cmd: 'Bouton B (G) / ▼+A', desc: 'Balayage Bas : fauche sous la garde !' },
-      { cmd: 'Gâchette R1 (T) / ▲+A', desc: 'Fendoir Lourd vertical descendant' },
-    ],
-    [
-      { cmd: 'Maintenir L1 (Maj)', desc: 'Garde Haute : bloque coups hauts/méd.' },
-      { cmd: 'L1 juste à l’impact', desc: 'PARADE PARFAITE : étourdit + Souffle !' },
-      { cmd: 'Onde de Vorgath', desc: 'Sautez (▲) par-dessus la faille au sol' },
-      { cmd: 'Orbe noir de Drax', desc: 'Roulez (D) à travers le projectile' },
-    ],
-    [
-      { cmd: 'Bouton C (R) / ◀+A', desc: 'COUP FATAL : décapite si PV bas / Rage!' },
-      { cmd: '★ Moulinet du Loup', desc: '[C] Portée +10px & seuil fatal +10%' },
-      { cmd: '★ Riposte de Fer', desc: '[L1] Parade élargie qui inflige -12 PV' },
-      { cmd: '★ Fendoir Brise-Garde', desc: '[R1] Fracasse la garde haute ennemie !' },
-    ],
-  ];
-
-  const rows = pages[codexUi.page] ?? pages[0];
+  // Left-side Crisp Structured Move Rows strictly bounded in x = 16..220 (maxWidth = 204px!)
+  const rows = cxLoc.pages[codexUi.page] ?? cxLoc.pages[0];
   rows.forEach((r, idx) => {
     const ry = 36 + idx * 29;
-    drawCrispText(ctx, r.cmd, 16, ry, '#fbbf24', 8, 'left');
-    drawCrispText(ctx, r.desc, 16, ry + 11, '#e2e8f0', 7, 'left', false);
+    drawCrispText(ctx, r.cmd, 16, ry, '#fbbf24', 8, 'left', true, 204);
+    drawCrispText(ctx, r.desc, 16, ry + 11, '#e2e8f0', 7, 'left', false, 204);
   });
 
-  // Tip box at bottom
-  const badge = getShortTechniqueBadge(equippedTechnique);
+  // Tip box at bottom (x = 16..304, inner text at x = 22, maxWidth = 276px!)
+  const badge = getShortTechniqueBadge(equippedTechnique, settings.language);
   pxRect(ctx, 16, 156, NATIVE_WIDTH - 32, 54, '#0c1018');
   pxRect(ctx, 16, 156, NATIVE_WIDTH - 32, 1, '#1e293b');
   drawCrispText(
     ctx,
-    `BOTTE ÉQUIPÉE : ${badge.label} (modifiable à la Forge — touche D)`,
+    cxLoc.tipEquippedLine(badge.label),
     22,
     162,
     badge.color,
     7,
-    'left'
+    'left',
+    true,
+    276
   );
   drawCrispText(
     ctx,
-    'Quand utiliser la Forge ? Entre 2 Actes, avant un Boss (touche D)',
+    cxLoc.tipForgeLine1,
     22,
     176,
     '#cbd5e1',
     7,
     'left',
-    false
+    false,
+    276
   );
   drawCrispText(
     ctx,
-    'ou après une défaite pour dépenser vos Éclats d’Acier gagnés !',
+    cxLoc.tipForgeLine2,
     22,
     188,
     '#cbd5e1',
     7,
     'left',
-    false
+    false,
+    276
   );
 
   drawCrispText(
     ctx,
-    '◀/▶ : Page 1..4 · D : Ouvrir la Forge · B / RUN : Retour au Jeu',
+    cxLoc.footerHint,
     160,
     218,
     '#4ade80',
     7,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 24
   );
 }
 
@@ -1499,6 +1891,10 @@ function drawIllustratedStoryScreen320(
   settings: AkaSystemSettings
 ): void {
   const t = TRANSLATIONS[settings.language];
+  const locAct = getLocalizedAct(act.actNumber - 1, settings.language);
+  const fg = getLocalizedForge(settings.language);
+  const ct = getLocalizedCombatText(settings.language);
+
   pxRect(ctx, 10, 10, NATIVE_WIDTH - 20, NATIVE_HEIGHT - 20, 'rgba(8, 10, 16, 0.94)');
   pxRect(ctx, 10, 10, NATIVE_WIDTH - 20, 2, '#d97706');
   pxRect(ctx, 10, NATIVE_HEIGHT - 12, NATIVE_WIDTH - 20, 2, '#d97706');
@@ -1539,47 +1935,45 @@ function drawIllustratedStoryScreen320(
     }
   }
 
-  let kicker = `${act.title} · ${steelShards} Éclats`;
-  let heading = act.zoneTitle;
-  let prose = act.zoneStoryIntro;
-  let quote = `Sbires : ${act.zoneSubtitle.split(' · ')[1] ?? act.zoneSubtitle} · L1 : Aide`;
+  let kicker = `${locAct.title} · ${steelShards} ${fg.shardWord}`;
+  let heading = locAct.zoneTitle;
+  let prose = locAct.zoneStoryIntro;
+  let quote = `${ct.storyMinionsPrefix} : ${locAct.zoneSubtitle.split(' · ')[1] ?? locAct.zoneSubtitle} · ${ct.storyHelpHint}`;
   let footerPrompt = t.storyZoneStartPrompt;
   let portraitSkin: FighterSkin = act.zoneFeaturedMinions[0] ?? 'krom';
 
   if (kind === 'STORY_BOSS_PRELUDE') {
-    kicker = `SCORE ${formatScore6(score)} · ${steelShards} ÉCLATS DISPO`;
-    heading = `${act.bossName} — ${act.bossTitle}`;
-    prose = act.bossPreludeBody;
-    quote = `${act.bossTaunt.slice(0, 44)}`;
+    kicker = `${t.scoreLabel} ${formatScore6(score)} · ${ct.storyShardsReady(steelShards)}`;
+    heading = `${locAct.bossName} — ${locAct.bossTitle}`;
+    prose = locAct.bossPreludeBody;
+    quote = locAct.bossTaunt;
     footerPrompt = t.storyBossEnterPrompt;
     portraitSkin = act.bossSkin;
   } else if (kind === 'STORY_ACT_EPILOGUE') {
-    kicker = `ACTE ACCOMPLI · ${steelShards} ÉCLATS À FORGER`;
-    heading = act.interludeTitle;
-    prose = act.interludeBody;
-    quote = `${t.scoreLabel} : ${formatScore6(score)} · +${act.rewardShards} Éclats d’Acier gagnés !`;
+    kicker = ct.storyActCleared(steelShards);
+    heading = locAct.interludeTitle;
+    prose = locAct.interludeBody;
+    quote = `${t.scoreLabel} : ${formatScore6(score)} · ${ct.storyShardsWon(act.rewardShards)}`;
     footerPrompt =
-      act.actNumber < 4
-        ? t.storyInterludeNextPrompt
-        : 'A/RUN : Conclure la Chronique · D : Forge';
+      act.actNumber < 6 ? t.storyInterludeNextPrompt : ct.storyFinishChroniclePrompt;
     portraitSkin = 'krom';
   }
 
   drawHudPortrait(ctx, portraitSkin, NATIVE_WIDTH - 44, 82, portraitSkin !== 'krom');
-  drawCrispText(ctx, kicker.slice(0, 42), 20, 82, '#f59e0b', 8, 'left');
-  drawCrispText(ctx, heading.slice(0, 34), 20, 95, '#ffffff', 9, 'left');
+  drawCrispText(ctx, kicker, 20, 82, '#f59e0b', 8, 'left', true, 248);
+  drawCrispText(ctx, heading, 20, 95, '#ffffff', 9, 'left', true, 248);
 
-  const bodyLines = wrapLines(prose, 45).slice(0, 4);
+  const bodyLines = wrapTextPx(ctx, prose, 276, 7, false).slice(0, 5);
   bodyLines.forEach((line, idx) => {
-    drawCrispText(ctx, line, 20, 114 + idx * 13, '#cbd5e1', 8, 'left', false);
+    drawCrispText(ctx, line, 20, 111 + idx * 11, '#cbd5e1', 7, 'left', false, 276);
   });
 
-  const quoteLines = wrapLines(quote, 46).slice(0, 2);
+  const quoteLines = wrapTextPx(ctx, quote, 276, 7, false).slice(0, 2);
   quoteLines.forEach((line, idx) => {
-    drawCrispText(ctx, line, 20, 172 + idx * 12, '#fde68a', 8, 'left', false);
+    drawCrispText(ctx, line, 20, 171 + idx * 11, '#fde68a', 7, 'left', false, 276);
   });
 
-  drawCrispText(ctx, footerPrompt, 160, 210, '#4ade80', 7, 'center');
+  drawCrispText(ctx, footerPrompt, 160, 210, '#4ade80', 7, 'center', true, NATIVE_WIDTH - 28);
 }
 
 function drawInScreenPostMatch(
@@ -1592,6 +1986,9 @@ function drawInScreenPostMatch(
   settings: AkaSystemSettings
 ): void {
   const t = TRANSLATIONS[settings.language];
+  const fg = getLocalizedForge(settings.language);
+  const ct = getLocalizedCombatText(settings.language);
+
   pxRect(ctx, 20, 40, NATIVE_WIDTH - 40, 158, 'rgba(9, 11, 16, 0.93)');
   pxRect(ctx, 20, 40, NATIVE_WIDTH - 40, 2, victory ? '#f59e0b' : '#dc2626');
   pxRect(ctx, 20, 196, NATIVE_WIDTH - 40, 2, victory ? '#f59e0b' : '#dc2626');
@@ -1603,33 +2000,69 @@ function drawInScreenPostMatch(
     54,
     victory ? '#fef08a' : '#f87171',
     11,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 56
   );
 
   drawCrispText(
     ctx,
-    `${t.scoreLabel} : ${formatScore6(score)} · ${steelShards} ÉCLATS`,
+    `${t.scoreLabel} : ${formatScore6(score)} · ${steelShards} ${fg.shardWord.toUpperCase()}`,
     160,
     76,
     '#38bdf8',
     8,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 56
   );
 
   if (victory && isCampaign && hasNextAct) {
-    drawCrispText(ctx, `▶ ${t.postMatchNextAct}`, 160, 102, '#4ade80', 9, 'center');
+    drawCrispText(
+      ctx,
+      `▶ ${t.postMatchNextAct}`,
+      160,
+      102,
+      '#4ade80',
+      9,
+      'center',
+      true,
+      NATIVE_WIDTH - 56
+    );
   }
-  drawCrispText(ctx, t.postMatchRematch, 160, 124, '#e2e8f0', 8, 'center');
   drawCrispText(
     ctx,
-    `D : Forge & Bottes (${steelShards} Écl.) · L1 : Guide Coups`,
+    t.postMatchRematch,
+    160,
+    124,
+    '#e2e8f0',
+    8,
+    'center',
+    true,
+    NATIVE_WIDTH - 56
+  );
+  drawCrispText(
+    ctx,
+    ct.postMatchForgeHint(steelShards),
     160,
     146,
     '#fbbf24',
     8,
-    'center'
+    'center',
+    true,
+    NATIVE_WIDTH - 56
   );
-  drawCrispText(ctx, t.postMatchTitleMenu, 160, 170, '#94a3b8', 7, 'center', false);
+  drawCrispText(
+    ctx,
+    t.postMatchTitleMenu,
+    160,
+    170,
+    '#94a3b8',
+    7,
+    'center',
+    false,
+    NATIVE_WIDTH - 56
+  );
 }
 
 function buildAsciiBar(percent: number): string {
@@ -1703,10 +2136,10 @@ function drawCutsceneScreen320(
     shot.shakeTicks?.some((st) => sTick >= st && sTick < st + 14)
   );
 
-  // WIDESCREEN 16-BIT CINEMA VIEWPORT (y = 22 .. 178)
+  // WIDESCREEN 16-BIT CINEMA VIEWPORT (y = 22 .. 172)
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 22, NATIVE_WIDTH, 156);
+  ctx.rect(0, 22, NATIVE_WIDTH, 150);
   ctx.clip();
 
   if (isShaking) {
@@ -1715,8 +2148,8 @@ function drawCutsceneScreen320(
     ctx.translate(rx, ry);
   }
 
-  // Shift world up by 24px so GROUND_Y (196) sits cleanly at y = 172 inside the letterbox!
-  ctx.translate(0, -24);
+  // Shift world up by 28px so GROUND_Y (196) sits cleanly at y = 168 inside the letterbox!
+  ctx.translate(0, -28);
 
   if (shot.backdrop === 'zone') {
     const zc = getZoneScrollCanvas960(shot.stage);
@@ -1851,56 +2284,65 @@ function drawCutsceneScreen320(
 
   ctx.restore();
 
+  const locCs = getLocalizedCutscene(cutsceneUi.cutsceneId, settings.language);
+  const locShot = locCs.shots[shotIndex] ?? {
+    speakerName: shot.speakerName,
+    text: shot.text,
+  };
+
   // TOP LETTERBOX BAR (y = 0 .. 22)
   pxRect(ctx, 0, 0, NATIVE_WIDTH, 21, '#06080d');
   pxRect(ctx, 0, 21, NATIVE_WIDTH, 1, '#b45309');
-  drawCrispText(ctx, def.title.slice(0, 34), 8, 6, '#fbbf24', 7, 'left');
+  drawCrispText(ctx, locCs.title, 8, 6, '#fbbf24', 7, 'left', true, 192);
   drawCrispText(
     ctx,
-    `${shotIndex + 1}/${def.shots.length} · [B/RUN] PASSER`,
+    `${shotIndex + 1}/${def.shots.length} · ${locCs.skipBadge}`,
     NATIVE_WIDTH - 8,
     6,
     '#4ade80',
     7,
-    'right'
+    'right',
+    true,
+    108
   );
 
-  // BOTTOM NARRATIVE DIALOGUE BAR (y = 178 .. 240)
-  pxRect(ctx, 0, 178, NATIVE_WIDTH, 62, '#06080d');
-  pxRect(ctx, 0, 178, NATIVE_WIDTH, 1, '#b45309');
+  // BOTTOM NARRATIVE DIALOGUE BAR (y = 172 .. 240)
+  pxRect(ctx, 0, 172, NATIVE_WIDTH, 68, '#06080d');
+  pxRect(ctx, 0, 172, NATIVE_WIDTH, 1, '#b45309');
 
   drawHudPortrait(
     ctx,
     shot.speakerSkin,
     8,
-    184,
+    178,
     shot.speakerSkin !== 'krom'
   );
-  drawCrispText(ctx, shot.speakerName, 38, 182, '#fde047', 8, 'left');
+  drawCrispText(ctx, locShot.speakerName, 38, 176, '#fde047', 8, 'left', true, 218);
 
   // Shot timeline progress bar on top-right of dialogue box
-  pxRect(ctx, NATIVE_WIDTH - 54, 184, 46, 4, '#1e293b');
-  pxRect(ctx, NATIVE_WIDTH - 53, 185, Math.round(44 * progress), 2, '#f59e0b');
+  pxRect(ctx, NATIVE_WIDTH - 54, 178, 46, 4, '#1e293b');
+  pxRect(ctx, NATIVE_WIDTH - 53, 179, Math.round(44 * progress), 2, '#f59e0b');
 
-  // Typewriter text reveal (~1.6 chars per tick, or full if textRevealed)
+  // Typewriter text reveal (~1.35 chars per tick, or full if textRevealed)
   const visibleChars = cutsceneUi.textRevealed
-    ? shot.text.length
-    : Math.min(shot.text.length, Math.floor(sTick * 1.6));
-  const partialText = shot.text.slice(0, visibleChars);
-  const lines = wrapLines(partialText, 42).slice(0, 3);
+    ? locShot.text.length
+    : Math.min(locShot.text.length, Math.floor(sTick * 1.35));
+  const partialText = locShot.text.slice(0, visibleChars);
+  const lines = wrapTextPx(ctx, partialText, 272, 7, false).slice(0, 4);
   lines.forEach((ln, idx) => {
-    drawCrispText(ctx, ln, 38, 194 + idx * 10, '#f1f5f9', 7, 'left', false);
+    drawCrispText(ctx, ln, 38, 188 + idx * 9, '#f1f5f9', 7, 'left', false, 272);
   });
 
   drawCrispText(
     ctx,
     t.cutsceneSkipHint,
     160,
-    228,
+    229,
     '#94a3b8',
     7,
     'center',
-    false
+    false,
+    NATIVE_WIDTH - 16
   );
 }
 
@@ -1929,8 +2371,8 @@ function drawAkaSystemMenuOverlay(
   pxRect(ctx, 18, 12, 2, NATIVE_HEIGHT - 24, '#334155');
   pxRect(ctx, NATIVE_WIDTH - 20, 12, 2, NATIVE_HEIGHT - 24, '#334155');
 
-  drawCrispText(ctx, t.sysMenuTitle, 160, 19, '#fef08a', 9, 'center');
-  drawCrispText(ctx, t.sysMenuPausedNotice, 160, 32, '#94a3b8', 7, 'center', false);
+  drawCrispText(ctx, t.sysMenuTitle, 160, 19, '#fef08a', 9, 'center', true, 268);
+  drawCrispText(ctx, t.sysMenuPausedNotice, 160, 32, '#94a3b8', 7, 'center', false, 268);
 
   const rows = [
     { label: t.sysMenuResume, value: 'A / RUN', valColor: '#4ade80' },
@@ -1956,7 +2398,9 @@ function drawAkaSystemMenuOverlay(
       y,
       selected ? '#ffffff' : idx === 1 ? '#7dd3fc' : '#cbd5e1',
       8,
-      'left'
+      'left',
+      true,
+      146
     );
     drawCrispText(
       ctx,
@@ -1965,11 +2409,13 @@ function drawAkaSystemMenuOverlay(
       y,
       selected && idx !== 2 ? '#fbbf24' : r.valColor,
       8,
-      'right'
+      'right',
+      true,
+      110
     );
   });
 
-  drawCrispText(ctx, t.sysMenuFooterHint, 160, 210, '#94a3b8', 7, 'center', false);
+  drawCrispText(ctx, t.sysMenuFooterHint, 160, 210, '#94a3b8', 7, 'center', false, 272);
 }
 
 export interface RenderAkaScreenParams {
@@ -2079,12 +2525,32 @@ export function renderGamebuinoFrame(
     const px = Math.round(proj.x);
     const py = Math.round(proj.y);
     if (proj.kind === 'shockwave') {
-      drawLightHalo(ctx, px, GROUND_Y - 10, 18, '249, 115, 22', 0.2, state.tick, proj.id);
-      pxRect(ctx, px - 10, GROUND_Y - 14, 20, 14, '#c2410c');
-      pxRect(ctx, px - 7, GROUND_Y - 22, 14, 20, '#f97316');
-      pxRect(ctx, px - 3, GROUND_Y - 26, 6, 22, '#fef08a');
+      const isCrystal = proj.colorTheme === 'crystal';
+      drawLightHalo(
+        ctx,
+        px,
+        GROUND_Y - 10,
+        18,
+        isCrystal ? '56, 189, 248' : '249, 115, 22',
+        0.2,
+        state.tick,
+        proj.id
+      );
+      pxRect(ctx, px - 10, GROUND_Y - 14, 20, 14, isCrystal ? '#0284c7' : '#c2410c');
+      pxRect(ctx, px - 7, GROUND_Y - 22, 14, 20, isCrystal ? '#38bdf8' : '#f97316');
+      pxRect(ctx, px - 3, GROUND_Y - 26, 6, 22, isCrystal ? '#e0f2fe' : '#fef08a');
     } else if (fxSheet) {
-      drawLightHalo(ctx, px, py, 20, '168, 85, 247', 0.22, state.tick, proj.id);
+      const isHellfire = proj.colorTheme === 'hellfire';
+      drawLightHalo(
+        ctx,
+        px,
+        py,
+        20,
+        isHellfire ? '249, 115, 22' : '168, 85, 247',
+        0.22,
+        state.tick,
+        proj.id
+      );
       const fb = selectFxSpriteFrame('fireball', state.tick);
       const fw = Math.round(fb.w * 0.22);
       const fh = Math.round(fb.h * 0.22);
@@ -2098,9 +2564,10 @@ export function renderGamebuinoFrame(
       ctx.drawImage(fxSheet, fb.x, fb.y, fb.w, fb.h, -fax, -Math.round(fh / 2), fw, fh);
       ctx.restore();
     } else {
-      pxRect(ctx, px - 9, py - 9, 18, 18, 'rgba(147, 51, 234, 0.55)');
-      pxRect(ctx, px - 6, py - 6, 12, 12, '#a855f7');
-      pxRect(ctx, px - 3, py - 3, 6, 6, '#fdf4ff');
+      const isHellfire = proj.colorTheme === 'hellfire';
+      pxRect(ctx, px - 9, py - 9, 18, 18, isHellfire ? 'rgba(234, 88, 12, 0.55)' : 'rgba(147, 51, 234, 0.55)');
+      pxRect(ctx, px - 6, py - 6, 12, 12, isHellfire ? '#f97316' : '#a855f7');
+      pxRect(ctx, px - 3, py - 3, 6, 6, isHellfire ? '#fef08a' : '#fdf4ff');
     }
   }
 
@@ -2118,7 +2585,7 @@ export function renderGamebuinoFrame(
   // Localized weapon contact slashes, sparks & arterial blood sprays!
   drawImpactEffects320(ctx, state.impacts, settings.goreMode, state.tick, 0);
 
-  drawGoblinCleaner320(ctx, state);
+  drawGoblinCleaner320(ctx, state, settings.language);
 
   for (const p of state.particles) {
     pxRect(ctx, Math.round(p.x), Math.round(p.y), p.size, p.size, p.color);
@@ -2126,14 +2593,14 @@ export function renderGamebuinoFrame(
 
   ctx.restore();
 
-  drawCombatHud320(ctx, state, progression.equippedTechnique);
+  drawCombatHud320(ctx, state, progression.equippedTechnique, settings.language);
 
   if (screenState === 'TITLE_MENU') {
     drawInScreenTitleMenu(ctx, titleCursor, progression, settings);
   } else if (screenState === 'AKA_FORGE') {
-    drawAkaForgeScreen320(ctx, progression, forgeUi, state.tick);
+    drawAkaForgeScreen320(ctx, progression, forgeUi, state.tick, settings);
   } else if (screenState === 'AKA_CODEX') {
-    drawAkaCodexScreen320(ctx, codexUi, progression.equippedTechnique);
+    drawAkaCodexScreen320(ctx, codexUi, progression.equippedTechnique, settings);
   } else if (
     screenState === 'STORY_INTRO' ||
     screenState === 'STORY_BOSS_PRELUDE' ||

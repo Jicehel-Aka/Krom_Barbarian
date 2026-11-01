@@ -42,6 +42,7 @@ export interface UiStrings {
   // In-screen Title Menu (non-touch, D-Pad/Joystick + A/RUN)
   titleSubtitle: string;
   titleMenuCampaign: string;
+  titleMenuCoop2P: string;
   titleMenuQuickAi: string;
   titleMenuForge: string;
   titleMenuCodex: string;
@@ -104,6 +105,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A : Suite · B / RUN : Passer · D : Forge',
     titleSubtitle: 'ÉDITION GAMEBUINO AKA ESP32-S3 · 320×240',
     titleMenuCampaign: 'Campagne (Zones + Boss)',
+    titleMenuCoop2P: 'Coop 2J : Horde & Zones',
     titleMenuQuickAi: 'Duel Direct contre Boss IA',
     titleMenuForge: 'Forge & Bottes Secrètes',
     titleMenuCodex: 'Guide : Coups & Parades',
@@ -162,6 +164,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A: Next · B / RUN: Skip · D: Forge',
     titleSubtitle: 'GAMEBUINO AKA ESP32-S3 EDITION · 320×240',
     titleMenuCampaign: 'Story Campaign (Zones + Bosses)',
+    titleMenuCoop2P: '2P Co-op: Horde & Zones',
     titleMenuQuickAi: 'Direct Boss AI Duel',
     titleMenuForge: 'Forge & Secret Arts',
     titleMenuCodex: 'Guide: Moves & Parries',
@@ -220,6 +223,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A: Seguir · B / RUN: Pular · D: Forja',
     titleSubtitle: 'EDIÇÃO GAMEBUINO AKA ESP32-S3 · 320×240',
     titleMenuCampaign: 'Campanha (Zonas + Chefes)',
+    titleMenuCoop2P: 'Coop 2J: Horda & Zonas',
     titleMenuQuickAi: 'Duelo Direto contra IA',
     titleMenuForge: 'Forja & Técnicas Secretas',
     titleMenuCodex: 'Guia: Golpes e Defesas',
@@ -278,6 +282,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A: Siguiente · B / RUN: Saltar · D: Forja',
     titleSubtitle: 'EDICIÓN GAMEBUINO AKA ESP32-S3 · 320×240',
     titleMenuCampaign: 'Campaña (Zonas + Jefes)',
+    titleMenuCoop2P: 'Coop 2J: Horda y Zonas',
     titleMenuQuickAi: 'Duelo Directo contra IA',
     titleMenuForge: 'Forja y Técnicas Secretas',
     titleMenuCodex: 'Guía: Golpes y Paradas',
@@ -336,6 +341,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A: Avanti · B / RUN: Salta · D: Forgia',
     titleSubtitle: 'EDIZIONE GAMEBUINO AKA ESP32-S3 · 320×240',
     titleMenuCampaign: 'Campagna (Zone + Boss)',
+    titleMenuCoop2P: 'Coop 2G: Orda e Zone',
     titleMenuQuickAi: 'Duello Diretto contro IA',
     titleMenuForge: 'Forgia e Tecniche Segrete',
     titleMenuCodex: 'Guida: Colpi e Parate',
@@ -394,6 +400,7 @@ export const TRANSLATIONS: Record<LanguageCode, UiStrings> = {
     cutsceneSkipHint: 'A: Weiter · B / RUN: Überspringen · D: Schmiede',
     titleSubtitle: 'GAMEBUINO AKA ESP32-S3 EDITION · 320×240',
     titleMenuCampaign: 'Story-Kampagne (Zonen + Bosse)',
+    titleMenuCoop2P: '2-Sp. Koop: Horde & Zonen',
     titleMenuQuickAi: 'Direktes KI-Bossduell',
     titleMenuForge: 'Schmiede & Geheimtechniken',
     titleMenuCodex: 'Hilfe: Hiebe & Paraden',
