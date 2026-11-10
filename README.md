@@ -30,3 +30,7 @@ npm run dev
 ```
 
 Ouvrez ensuite `http://localhost:3000`.
+
+## Licence
+
+Création originale de Jicehel (Jean-Charles Lebeau), publiée sous licence **[Creative Commons Attribution - Pas d'Utilisation Commerciale 4.0 (CC BY-NC 4.0)](LICENSE)** : tu peux copier, modifier et partager librement, avec mention de l'auteur, mais pas à des fins commerciales. Le texte complet est dans le fichier [LICENSE](LICENSE). Les bibliothèques et ressources tierces gardent leur propre licence.
